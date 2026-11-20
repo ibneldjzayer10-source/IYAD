@@ -15,11 +15,17 @@ jobs:
           python-version: '3.10'
       - name: فك الضغط وتجهيز الأدوات
         run: |
+          ls -la
           sudo apt-get update && sudo apt-get install -y ffmpeg unzip
-          if [ -f "bmw-empire.zip" ]; then unzip -o bmw-empire.zip; fi
+          for f in *.zip; do [ -e "$f" ] && unzip -o "$f"; done
+          ls -la
       - name: تثبيت المكتبات وتشغيل المصنع
         run: |
           REQ_FILE=$(find . -name "requirements.txt" | head -n 1)
+          if [ -z "$REQ_FILE" ]; then
+            echo "لم يتم رفع ملفات المشروع بعد!"
+            exit 1
+          fi
           DIR=$(dirname "$REQ_FILE")
           cd "$DIR"
           pip install -r requirements.txt
