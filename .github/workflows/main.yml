@@ -40,7 +40,7 @@ jobs:
 
           with open("reel.mp4", "rb") as f:
               up = requests.post(API + "/media", headers=H, files={"files": ("reel.mp4", f, "video/mp4")}).json()
-          vid_url = (up.get("files") or up.get("media") or [up])["url"]
+          vid_url = (up.get("files") or up.get("media") or [up])[0]["url"]
 
           post = requests.post(API + "/posts", headers=H, json={
               "content": "أسطورة محركات BMW V10 🔥 أي جيل من M5 تفضل؟ #BMW #BMWM5 #سيارات",
