@@ -9,20 +9,45 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: 1. سحب الملفات
+        uses: actions/checkout@v4
+
+      - name: 2. تجهيز بايثون
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: تجهيز الأدوات
+
+      - name: 3. فحص وفك الضغط عن المشروع
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg unzip
           for f in *.zip; do [ -e "$f" ] && unzip -o "$f"; done
-      - name: تشغيل المصنع
+
+      - name: 4. تجهيز المهارات وتشغيل المصنع
+        env:
+          LATE_API_KEY: "6b0027adc7bae6f58e00c7be"
         run: |
+          set -e
           REQ_FILE=$(find . -name "requirements.txt" | head -n 1)
+          if [ -z "$REQ_FILE" ]; then
+            echo "❌ خطأ: لم يتم العثور على ملف requirements.txt"
+            exit 1
+          fi
           DIR=$(dirname "$REQ_FILE")
+          echo "📂 الدخول إلى مجلد المشروع: $DIR"
           cd "$DIR"
-          mkdir -p .claude
-          if [ -d "commands" ]; then cp -r commands .claude/; fi
-          pip install -r requirements.txt
+
+          mkdir -p .claude/commands 01_raw_media 02_transcripts 03_sliced_clips 04_final_reels 05_published assets
+          if [ -d "commands" ]; then
+            cp -r commands/* .claude/commands/
+            echo "✅ تم نسخ ملفات المهارات بنجاح"
+          fi
+
+          if [ ! -f ".env" ]; then
+            echo 'LATE_API_KEY="6b0027adc7bae6f58e00c7be"' > .env
+            echo "✅ تم إنشاء ملف .env تلقائياً"
+          fi
+
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt imageio-ffmpeg python-dotenv
+
+          echo "🚀 بدء تشغيل مصنع فيديوهات BMW..."
           python run_pipeline.py
