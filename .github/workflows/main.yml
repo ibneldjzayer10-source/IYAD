@@ -17,11 +17,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 3. فحص وفك الضغط عن المشروع
-        run: |
-          for f in *.zip; do [ -e "$f" ] && unzip -o "$f"; done
-
-      - name: 4. تجهيز المهارات وتشغيل المصنع
+      - name: 3. تجهيز المهارات وتشغيل المصنع
         env:
           LATE_API_KEY: "6b0027adc7bae6f58e00c7be"
         run: |
