@@ -9,13 +9,14 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. سحب الصور من المستودع
+      - name: 1. سحب الملفات والصور
         uses: actions/checkout@v4
 
       - name: 2. صناعة الريلز من صورك ونشرها
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
+          ls -la
           pip install -q edge-tts requests imageio-ffmpeg Pillow
           python3 -c '
           import os, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
@@ -47,20 +48,29 @@ jobs:
               await edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+5%").save("voice.mp3")
           asyncio.run(make_audio())
 
-          # البحث الشامل عن جميع الصور في كل مجلدات المستودع (بغض النظر عن مكانها أو حالة الأحرف)
+          # فحص كل الملفات الموجودة واختيار أي ملف يمكن فتحه كصورة (بغض النظر عن الامتداد)
           imgs = []
-          for root, _, files in os.walk("."):
+          for root, dirs, files in os.walk("."):
+              if ".git" in root or ".github" in root:
+                  continue
               for f in files:
-                  if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp")) and f not in ("frame.jpg", "bg.png"):
-                      imgs.append(os.path.join(root, f))
+                  if f in ("frame.jpg", "bg.png"):
+                      continue
+                  p = os.path.join(root, f)
+                  try:
+                      with Image.open(p) as im:
+                          im.verify()
+                      imgs.append(p)
+                  except Exception:
+                      pass
 
+          print("📂 الصور المكتشفة:", imgs)
           if not imgs:
-              raise SystemExit("❌ لم يتم العثور على أي صورة! تأكد من الضغط على زر Commit changes الأخضر بعد رفع الصور.")
+              raise SystemExit("❌ المستودع لا يحتوي على أي ملف صورة! تأكد أنك في المستودع الصحيح.")
 
           chosen_img = random.choice(imgs)
           print("🖼️ جاري استخدام صورتك:", chosen_img)
 
-          # خلفية ضبابية فخمة + صورتك كاملة في المنتصف
           orig = Image.open(chosen_img).convert("RGB")
           bg = ImageOps.fit(orig, (1080, 1920), method=Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(25))
           fg = ImageOps.contain(orig, (1080, 1450), method=Image.Resampling.LANCZOS)
