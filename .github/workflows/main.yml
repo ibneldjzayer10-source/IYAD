@@ -13,15 +13,16 @@ jobs:
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
-          pip install -q edge-tts requests imageio-ffmpeg
+          pip install -q edge-tts requests imageio-ffmpeg Pillow
           python3 -c '
           import os, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
+          from PIL import Image, ImageDraw
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
           KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
-          UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BMWBot/1.0"}
+          UA = {"User-Agent": "BMWReelsAutoBot/1.0 (https://github.com; admin@bmwreels.org)"}
 
           TOPICS = [
               {
@@ -44,52 +45,61 @@ jobs:
               await edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+5%").save("voice.mp3")
           asyncio.run(make_audio())
 
-          # البحث عن فيديوهات وصور BMW حقيقية باستخدام معاملات آمنة لا يختصرها المتصفح
-          wiki_api = "https://wikimedia.org" + "/w/api.php"
-          params = {
-              "action": "query",
-              "generator": "search",
-              "gsrsearch": "filetype:video BMW M3 OR M4 OR M5 OR drift",
-              "gsrnamespace": "6",
-              "gsrlimit": "15",
-              "prop": "imageinfo",
-              "iiprop": "url",
-              "format": "json"
-          }
-          res = requests.get(wiki_api, params=params, headers=UA, timeout=30).json()
-          pages = list(res.get("query", {}).get("pages", {}).values())
-          vid_urls = [next(iter(p["imageinfo"]))["url"] for p in pages if p.get("imageinfo")]
+          media_ready = False
+          try:
+              wiki_api = "https://wikimedia.org" + "/w/api.php"
+              for q in ["filetype:video BMW M3 OR M4 OR M5", "BMW M3 M4 M5 sports car"]:
+                  params = {
+                      "action": "query",
+                      "generator": "search",
+                      "gsrsearch": q,
+                      "gsrnamespace": "6",
+                      "gsrlimit": "15",
+                      "prop": "imageinfo",
+                      "iiprop": "url",
+                      "format": "json"
+                  }
+                  r = requests.get(wiki_api, params=params, headers=UA, timeout=20)
+                  if r.status_code == 200 and r.text.strip().startswith("{"):
+                      pages = list(r.json().get("query", {}).get("pages", {}).values())
+                      urls = [next(iter(p["imageinfo"]))["url"] for p in pages if p.get("imageinfo")]
+                      valid = [u for u in urls if u.lower().endswith((".mp4", ".webm", ".ogv", ".jpg", ".jpeg", ".png"))]
+                      if valid:
+                          chosen = random.choice(valid)
+                          print("🎥 تم جلب الوسائط من ويكيميديا:", chosen)
+                          with requests.get(chosen, headers=UA, stream=True, timeout=60) as dl:
+                              dl.raise_for_status()
+                              with open("raw_media.dat", "wb") as f:
+                                  for chunk in dl.iter_content(8192):
+                                      f.write(chunk)
+                          if chosen.lower().endswith((".jpg", ".jpeg", ".png")):
+                              subprocess.run([
+                                  FFMPEG, "-y", "-loop", "1", "-i", "raw_media.dat", "-i", "voice.mp3",
+                                  "-vf", "scale=1200:2133:force_original_aspect_ratio=increase,crop=1200:2133,zoompan=z=\x27min(zoom+0.0008,1.15)\x27:d=1200:s=1080x1920:fps=25",
+                                  "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "reel.mp4"
+                              ], check=True)
+                          else:
+                              subprocess.run([
+                                  FFMPEG, "-y", "-stream_loop", "-1", "-i", "raw_media.dat", "-i", "voice.mp3",
+                                  "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=25",
+                                  "-map", "0:v:0", "-map", "1:a:0",
+                                  "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "reel.mp4"
+                              ], check=True)
+                          media_ready = True
+                          break
+          except Exception as e:
+              print("⚠️ تعذر جلب الوسائط الخارجية، جاري استخدام التصميم الاحتياطي:", e)
 
-          if not vid_urls:
-              # خطة احتياطية: جلب صور BMW عالية الدقة وتحويلها لفيديو سينمائي متحرك
-              params["gsrsearch"] = "BMW M3 M4 M5 sports car"
-              res = requests.get(wiki_api, params=params, headers=UA, timeout=30).json()
-              pages = list(res.get("query", {}).get("pages", {}).values())
-              vid_urls = [next(iter(p["imageinfo"]))["url"] for p in pages if p.get("imageinfo") and next(iter(p["imageinfo"]))["url"].lower().endswith((".jpg", ".jpeg", ".png"))]
-
-          chosen_url = random.choice(vid_urls)
-          print("🎥 تم اختيار الملف الحقيقي:", chosen_url)
-
-          with requests.get(chosen_url, headers=UA, stream=True, timeout=60) as r:
-              r.raise_for_status()
-              with open("raw_media.dat", "wb") as f:
-                  for chunk in r.iter_content(chunk_size=8192):
-                      f.write(chunk)
-
-          if chosen_url.lower().endswith((".jpg", ".jpeg", ".png")):
+          if not media_ready:
+              img = Image.new("RGB", (1080, 1920), (0, 51, 102))
+              draw = ImageDraw.Draw(img)
+              draw.rectangle((0, 0, 1080, 80), fill=(0, 160, 233))
+              draw.rectangle((0, 80, 1080, 160), fill=(0, 51, 102))
+              draw.rectangle((0, 160, 1080, 240), fill=(226, 0, 26))
+              img.save("bg.png")
               subprocess.run([
-                  FFMPEG, "-y", "-loop", "1", "-i", "raw_media.dat", "-i", "voice.mp3",
-                  "-vf", "scale=1200:2133:force_original_aspect_ratio=increase,crop=1200:2133,zoompan=z=\x27min(zoom+0.0008,1.15)\x27:d=1200:s=1080x1920:fps=25",
-                  "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
-                  "-c:a", "aac", "-shortest", "reel.mp4"
-              ], check=True)
-          else:
-              subprocess.run([
-                  FFMPEG, "-y", "-stream_loop", "-1", "-i", "raw_media.dat", "-i", "voice.mp3",
-                  "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=25",
-                  "-map", "0:v:0", "-map", "1:a:0",
-                  "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
-                  "-c:a", "aac", "-shortest", "reel.mp4"
+                  FFMPEG, "-y", "-loop", "1", "-i", "bg.png", "-i", "voice.mp3",
+                  "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "reel.mp4"
               ], check=True)
 
           r_acc = requests.get(API + "/accounts", headers=H).json()
@@ -107,5 +117,5 @@ jobs:
               "platforms": [{"platform": "instagram", "accountId": ig_id, "platformSpecificData": {"contentType": "reels"}}],
               "publishNow": True
           })
-          print("✅ تم نشر الريلز الحقيقي بنجاح:", post.status_code)
+          print("✅ تم نشر الريلز بنجاح:", post.status_code)
           '
