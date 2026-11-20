@@ -9,41 +9,41 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. سحب الملفات
-        uses: actions/checkout@v4
-
-      - name: 2. تجهيز بايثون
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: 3. تجهيز المهارات وتشغيل المصنع
-        env:
-          LATE_API_KEY: "6b0027adc7bae6f58e00c7be"
+      - name: تشغيل ونشر فيديو BMW مباشرة
         run: |
-          set -e
-          REQ_FILE=$(find . -name "requirements.txt" | head -n 1)
-          if [ -z "$REQ_FILE" ]; then
-            echo "❌ خطأ: لم يتم العثور على ملف requirements.txt"
-            exit 1
-          fi
-          DIR=$(dirname "$REQ_FILE")
-          echo "📂 الدخول إلى مجلد المشروع: $DIR"
-          cd "$DIR"
+          pip install -q edge-tts requests imageio-ffmpeg
+          python3 -c '
+          import asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
 
-          mkdir -p .claude/commands 01_raw_media 02_transcripts 03_sliced_clips 04_final_reels 05_published assets
-          if [ -d "commands" ]; then
-            cp -r commands/* .claude/commands/
-            echo "✅ تم نسخ ملفات المهارات بنجاح"
-          fi
+          FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+          KEY = "6b0027adc7bae6f58e00c7be"
+          H = {"Authorization": f"Bearer {KEY}"}
+          TEXT = "هل تعلم أن محرك بي إم دبليو M5 E60 من نوع V10 بسعة خمسة لترات مستوحى مباشرة من سيارات الفورمولا وان؟ بقوة 507 حصان وصوت يطرب عشاق السرعة!"
 
-          if [ ! -f ".env" ]; then
-            echo 'LATE_API_KEY="6b0027adc7bae6f58e00c7be"' > .env
-            echo "✅ تم إنشاء ملف .env تلقائياً"
-          fi
+          async def make_audio():
+              await edge_tts.Communicate(TEXT, "ar-SA-HamedNeural").save("voice.mp3")
 
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt imageio-ffmpeg python-dotenv
+          asyncio.run(make_audio())
 
-          echo "🚀 بدء تشغيل مصنع فيديوهات BMW..."
-          python run_pipeline.py
+          subprocess.run([
+              FFMPEG, "-y", "-f", "lavfi", "-i", "color=c=0x003366:s=1080x1920:d=15:r=25",
+              "-i", "voice.mp3", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+              "-c:a", "aac", "-shortest", "reel.mp4"
+          ], check=True)
+
+          acc_res = requests.get("https://zernio.com", headers=H).json()
+          accs = acc_res.get("accounts", acc_res) if isinstance(acc_res, dict) else acc_res
+          ig_id = next(a.get("_id") or a.get("id") for a in accs if a.get("platform") == "instagram")
+
+          with open("reel.mp4", "rb") as f:
+              up = requests.post("https://zernio.com", headers=H, files={"files": ("reel.mp4", f, "video/mp4")}).json()
+          vid_url = (up.get("files") or up.get("media") or [up])[0]["url"]
+
+          post = requests.post("https://zernio.com", headers=H, json={
+              "content": "أسطورة محركات BMW V10 🔥 أي جيل من M5 تفضل؟ #BMW #BMWM5 #سيارات",
+              "mediaItems": [{"type": "video", "url": vid_url}],
+              "platforms": [{"platform": "instagram", "accountId": ig_id, "platformSpecificData": {"contentType": "reels"}}],
+              "publishNow": True
+          })
+          print("النتيجة:", post.status_code, post.text)
+          '
