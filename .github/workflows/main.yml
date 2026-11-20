@@ -18,8 +18,8 @@ jobs:
         run: |
           pip install -q edge-tts requests imageio-ffmpeg Pillow
           python3 -c '
-          import os, glob, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
-          from PIL import Image, ImageOps
+          import os, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
+          from PIL import Image, ImageOps, ImageFilter
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
           KEY = os.environ["ZERNIO_KEY"]
@@ -47,22 +47,26 @@ jobs:
               await edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+5%").save("voice.mp3")
           asyncio.run(make_audio())
 
-          # البحث عن صورك المرفوعة في مجلد assets
+          # البحث الشامل عن جميع الصور في كل مجلدات المستودع (بغض النظر عن مكانها أو حالة الأحرف)
           imgs = []
-          for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
-              imgs.extend(glob.glob(f"**/assets/{ext}", recursive=True))
+          for root, _, files in os.walk("."):
+              for f in files:
+                  if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp")) and f not in ("frame.jpg", "bg.png"):
+                      imgs.append(os.path.join(root, f))
+
+          if not imgs:
+              raise SystemExit("❌ لم يتم العثور على أي صورة! تأكد من الضغط على زر Commit changes الأخضر بعد رفع الصور.")
 
           chosen_img = random.choice(imgs)
           print("🖼️ جاري استخدام صورتك:", chosen_img)
 
-          # تجهيز الصورة بمقاس الريلز العمودي 1080x1920 مع خلفية ضبابية أنيقة تحافظ على كامل تفاصيل السيارة
+          # خلفية ضبابية فخمة + صورتك كاملة في المنتصف
           orig = Image.open(chosen_img).convert("RGB")
-          bg = ImageOps.fit(orig, (1080, 1920), method=Image.Resampling.LANCZOS)
-          fg = ImageOps.contain(orig, (1080, 1400), method=Image.Resampling.LANCZOS)
+          bg = ImageOps.fit(orig, (1080, 1920), method=Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(25))
+          fg = ImageOps.contain(orig, (1080, 1450), method=Image.Resampling.LANCZOS)
           bg.paste(fg, ((1080 - fg.width) // 2, (1920 - fg.height) // 2))
           bg.save("frame.jpg", quality=95)
 
-          # إضافة حركة تقريب سينمائية (Zoom-in) ودمج الصوت العربي
           subprocess.run([
               FFMPEG, "-y", "-loop", "1", "-i", "frame.jpg", "-i", "voice.mp3",
               "-vf", "scale=1200:2133,zoompan=z=\x27min(zoom+0.0007,1.12)\x27:d=1200:s=1080x1920:fps=25",
