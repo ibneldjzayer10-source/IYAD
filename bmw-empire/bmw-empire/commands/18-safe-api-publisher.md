@@ -1,14 +1,9 @@
-# 18 — Safe API Publisher (Late API → Instagram Reel)
-**الوظيفة:** يرفع كل ريل جاهز في `04_final_reels` وينشره على إنستغرام عبر Late API بمفتاح `LATE_API_KEY` من `.env`، ثم ينقله مع ملفاته إلى `05_published` ويسجّل `published_log.json`.
-**أمان:** `MAX_POSTS_PER_RUN` (افتراضي 3) و `DRY_RUN=1` للتجربة بلا نشر. المفتاح لا يُطبع أبداً.
-**تنبيه:** نقاط الـ API (المسارات وأسماء الحقول) كُتبت من معرفتي بتوثيق Late دون إمكانية اختبارها هنا، فتأكد منها في getlate.dev/docs وعدّل الثوابت أعلى السكربت عند الحاجة. وقبل أول نشر فعلي شغّل `--dry-run`، وتأكد أن حساب إنستغرام مربوط في لوحة Late.
-
 ```python
 import os, shutil, time
 import requests
 from common import *
 
-BASE = os.environ.get("LATE_BASE_URL", "https://getlate.dev/api/v1")
+BASE = os.environ.get("LATE_BASE_URL", "https://zernio.com")
 KEY = os.environ.get("LATE_API_KEY")
 DRY = os.environ.get("DRY_RUN", "0") == "1"
 MAX_POSTS = int(os.environ.get("MAX_POSTS_PER_RUN", "3"))
@@ -25,7 +20,7 @@ def instagram_account_id():
     for a in (data.get("accounts", data) if isinstance(data, dict) else data):
         if a.get("platform") == "instagram":
             return a.get("_id") or a.get("id")
-    raise SystemExit("لا يوجد حساب إنستغرام مربوط في Late")
+    raise SystemExit("لا يوجد حساب إنستغرام مربوط في Zernio/Late")
 
 
 def upload(path):
@@ -44,7 +39,7 @@ acc = None if DRY or not ready else instagram_account_id()
 log = load("published_log.json", [])
 for mp4 in ready:
     meta_f = FIN / f"{mp4.stem}.meta.json"
-    meta = json.loads(meta_f.read_text(encoding="utf-8")) if meta_f.exists() else {"caption": "", "topics": []}
+    meta = json.loads(meta_f.read_text(encoding="utf-8")) if meta_f.exists() else {"caption": "BMW Power 🔥 #BMW #BMWM", "topics": []}
     if DRY:
         print("[DRY] كان سينشر:", mp4.name, "\n", meta["caption"][:120])
         continue
