@@ -9,7 +9,7 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: إنتاج ونشر ريلز BMW بفيديو حقيقي
+      - name: إنتاج ونشر ريلز BMW احترافية
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
@@ -21,7 +21,7 @@ jobs:
           KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
-          UA = {"User-Agent": "BMWReelsBot/1.0 (contact@example.com)"}
+          UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BMWBot/1.0"}
 
           TOPICS = [
               {
@@ -44,26 +44,53 @@ jobs:
               await edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+5%").save("voice.mp3")
           asyncio.run(make_audio())
 
-          search_url = "https://wikimedia.org"
-          res = requests.get(search_url, headers=UA, timeout=30).json()
+          # البحث عن فيديوهات وصور BMW حقيقية باستخدام معاملات آمنة لا يختصرها المتصفح
+          wiki_api = "https://wikimedia.org" + "/w/api.php"
+          params = {
+              "action": "query",
+              "generator": "search",
+              "gsrsearch": "filetype:video BMW M3 OR M4 OR M5 OR drift",
+              "gsrnamespace": "6",
+              "gsrlimit": "15",
+              "prop": "imageinfo",
+              "iiprop": "url",
+              "format": "json"
+          }
+          res = requests.get(wiki_api, params=params, headers=UA, timeout=30).json()
           pages = list(res.get("query", {}).get("pages", {}).values())
           vid_urls = [next(iter(p["imageinfo"]))["url"] for p in pages if p.get("imageinfo")]
+
+          if not vid_urls:
+              # خطة احتياطية: جلب صور BMW عالية الدقة وتحويلها لفيديو سينمائي متحرك
+              params["gsrsearch"] = "BMW M3 M4 M5 sports car"
+              res = requests.get(wiki_api, params=params, headers=UA, timeout=30).json()
+              pages = list(res.get("query", {}).get("pages", {}).values())
+              vid_urls = [next(iter(p["imageinfo"]))["url"] for p in pages if p.get("imageinfo") and next(iter(p["imageinfo"]))["url"].lower().endswith((".jpg", ".jpeg", ".png"))]
+
           chosen_url = random.choice(vid_urls)
-          print("🎥 جاري تحميل الفيديو الحقيقي:", chosen_url)
+          print("🎥 تم اختيار الملف الحقيقي:", chosen_url)
 
           with requests.get(chosen_url, headers=UA, stream=True, timeout=60) as r:
               r.raise_for_status()
-              with open("raw_car.vid", "wb") as f:
+              with open("raw_media.dat", "wb") as f:
                   for chunk in r.iter_content(chunk_size=8192):
                       f.write(chunk)
 
-          subprocess.run([
-              FFMPEG, "-y", "-stream_loop", "-1", "-i", "raw_car.vid", "-i", "voice.mp3",
-              "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=25",
-              "-map", "0:v:0", "-map", "1:a:0",
-              "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
-              "-c:a", "aac", "-shortest", "reel.mp4"
-          ], check=True)
+          if chosen_url.lower().endswith((".jpg", ".jpeg", ".png")):
+              subprocess.run([
+                  FFMPEG, "-y", "-loop", "1", "-i", "raw_media.dat", "-i", "voice.mp3",
+                  "-vf", "scale=1200:2133:force_original_aspect_ratio=increase,crop=1200:2133,zoompan=z=\x27min(zoom+0.0008,1.15)\x27:d=1200:s=1080x1920:fps=25",
+                  "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+                  "-c:a", "aac", "-shortest", "reel.mp4"
+              ], check=True)
+          else:
+              subprocess.run([
+                  FFMPEG, "-y", "-stream_loop", "-1", "-i", "raw_media.dat", "-i", "voice.mp3",
+                  "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=25",
+                  "-map", "0:v:0", "-map", "1:a:0",
+                  "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+                  "-c:a", "aac", "-shortest", "reel.mp4"
+              ], check=True)
 
           r_acc = requests.get(API + "/accounts", headers=H).json()
           accs = r_acc.get("accounts", r_acc) if isinstance(r_acc, dict) else r_acc
