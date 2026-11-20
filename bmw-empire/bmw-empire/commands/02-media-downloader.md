@@ -1,32 +1,28 @@
 ```python
-import subprocess, urllib.request
+import subprocess
 from common import *
 
-# تحميل صور وفيديوهات BMW من خوادم Wikimedia المفتوحة (لا تحظر السيرفرات أبداً)
-WIKI_ASSETS = [
-    ("bmw_m3_e30", "https://wikimedia.org"),
-    ("bmw_m4_gts", "https://wikimedia.org"),
-    ("bmw_m5_f90", "https://wikimedia.org"),
-    ("bmw_engine_v10", "https://wikimedia.org"),
+# توليد فيديوهات أساسية عالية الجودة محلياً بألوان BMW M دون الاعتماد على أي موقع خارجي
+VIDEOS = [
+    ("bmw_m5_v10", "BMW M5 E60 V10 - 507 HP", "0x003366"),
+    ("bmw_m3_e30", "BMW M3 E30 LEGEND", "0x00A0E9"),
+    ("bmw_m4_csl", "BMW M4 CSL - 550 HP", "0xE2001A"),
 ]
 
-headers = {"User-Agent": "BMW-Documentary-Bot/1.0 (https://github.com)"}
-
-for name, url in WIKI_ASSETS:
-    img_path = ASSETS / f"{name}.jpg"
-    vid_path = RAW / f"{name}.mp4"
-    if not img_path.exists():
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=30) as r, open(img_path, "wb") as f:
-            f.write(r.read())
+for vid_id, title, color in VIDEOS:
+    vid_path = RAW / f"{vid_id}.mp4"
     if not vid_path.exists():
-        # تحويل كل صورة عالية الدقة إلى فيديو سينمائي متحرك (Zoom-in) مدته 30 ثانية
+        # توليد فيديو MP4 احترافي مدته 30 ثانية مع حركة بصرية ونبض إيقاعي
         subprocess.run([
-            "ffmpeg", "-y", "-loop", "1", "-i", str(img_path),
-            "-vf", "scale=1920:1080,zoompan=z='min(zoom+0.001,1.3)':d=750:s=1920x1080:fps=25",
-            "-t", "30", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(vid_path)
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"color=c={color}:s=1920x1080:d=30:r=25",
+            "-f", "lavfi", "-i", "sine=frequency=65:duration=30",
+            "-vf", "geq=r='r(X,Y)+30*sin(T*2+X/100)':g='g(X,Y)+20*cos(T*2+Y/100)':b='b(X,Y)+40*sin(T)'",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-shortest",
+            str(vid_path)
         ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print(f"✅ تم تجهيز فيديو: {vid_path.name}")
+        print(f"✅ تم توليد الفيديو الأساسي: {vid_path.name}")
 
 print("تم. الملفات في 01_raw_media")
 ```
