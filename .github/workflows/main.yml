@@ -10,13 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: تشغيل ونشر فيديو BMW مباشرة
+        env:
+          ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
           pip install -q edge-tts requests imageio-ffmpeg
           python3 -c '
-          import asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
+          import os, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
-          KEY = "6b0027adc7bae6f58e00c7be"
+          KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
           TEXT = "هل تعلم أن محرك بي إم دبليو M5 E60 من نوع V10 بسعة خمسة لترات مستوحى مباشرة من سيارات الفورمولا وان؟ بقوة 507 حصان وصوت يطرب عشاق السرعة!"
@@ -32,17 +34,13 @@ jobs:
               "-c:a", "aac", "-shortest", "reel.mp4"
           ], check=True)
 
-          r_acc = requests.get(API + "/accounts", headers=H)
-          print("Accounts status:", r_acc.status_code, r_acc.text[:200])
-          acc_res = r_acc.json()
-          accs = acc_res.get("accounts", acc_res) if isinstance(acc_res, dict) else acc_res
+          r_acc = requests.get(API + "/accounts", headers=H).json()
+          accs = r_acc.get("accounts", r_acc) if isinstance(r_acc, dict) else r_acc
           ig_id = next(a.get("_id") or a.get("id") for a in accs if a.get("platform") == "instagram")
 
           with open("reel.mp4", "rb") as f:
-              r_up = requests.post(API + "/media", headers=H, files={"files": ("reel.mp4", f, "video/mp4")})
-          print("Upload status:", r_up.status_code, r_up.text[:200])
-          up = r_up.json()
-          vid_url = (up.get("files") or up.get("media") or [up])[0]["url"]
+              up = requests.post(API + "/media", headers=H, files={"files": ("reel.mp4", f, "video/mp4")}).json()
+          vid_url = (up.get("files") or up.get("media") or [up])["url"]
 
           post = requests.post(API + "/posts", headers=H, json={
               "content": "أسطورة محركات BMW V10 🔥 أي جيل من M5 تفضل؟ #BMW #BMWM5 #سيارات",
