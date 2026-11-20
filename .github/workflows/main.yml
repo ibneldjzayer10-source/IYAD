@@ -17,6 +17,7 @@ jobs:
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
           KEY = "6b0027adc7bae6f58e00c7be"
+          API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
           TEXT = "هل تعلم أن محرك بي إم دبليو M5 E60 من نوع V10 بسعة خمسة لترات مستوحى مباشرة من سيارات الفورمولا وان؟ بقوة 507 حصان وصوت يطرب عشاق السرعة!"
 
@@ -31,19 +32,23 @@ jobs:
               "-c:a", "aac", "-shortest", "reel.mp4"
           ], check=True)
 
-          acc_res = requests.get("https://zernio.com", headers=H).json()
+          r_acc = requests.get(API + "/accounts", headers=H)
+          print("Accounts status:", r_acc.status_code, r_acc.text[:200])
+          acc_res = r_acc.json()
           accs = acc_res.get("accounts", acc_res) if isinstance(acc_res, dict) else acc_res
           ig_id = next(a.get("_id") or a.get("id") for a in accs if a.get("platform") == "instagram")
 
           with open("reel.mp4", "rb") as f:
-              up = requests.post("https://zernio.com", headers=H, files={"files": ("reel.mp4", f, "video/mp4")}).json()
+              r_up = requests.post(API + "/media", headers=H, files={"files": ("reel.mp4", f, "video/mp4")})
+          print("Upload status:", r_up.status_code, r_up.text[:200])
+          up = r_up.json()
           vid_url = (up.get("files") or up.get("media") or [up])[0]["url"]
 
-          post = requests.post("https://zernio.com", headers=H, json={
+          post = requests.post(API + "/posts", headers=H, json={
               "content": "أسطورة محركات BMW V10 🔥 أي جيل من M5 تفضل؟ #BMW #BMWM5 #سيارات",
               "mediaItems": [{"type": "video", "url": vid_url}],
               "platforms": [{"platform": "instagram", "accountId": ig_id, "platformSpecificData": {"contentType": "reels"}}],
               "publishNow": True
           })
-          print("النتيجة:", post.status_code, post.text)
+          print("النتيجة النهائية:", post.status_code, post.text)
           '
