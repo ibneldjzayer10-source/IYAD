@@ -9,33 +9,35 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: إنتاج ونشر ريلز BMW احترافية
+      - name: 1. سحب الصور من المستودع
+        uses: actions/checkout@v4
+
+      - name: 2. صناعة الريلز من صورك ونشرها
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
           pip install -q edge-tts requests imageio-ffmpeg Pillow
           python3 -c '
-          import os, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
-          from PIL import Image, ImageDraw
+          import os, glob, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
+          from PIL import Image, ImageOps
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
           KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
-          UA = {"User-Agent": "BMWReelsAutoBot/1.0 (https://github.com; admin@bmwreels.org)"}
 
           TOPICS = [
               {
-                  "script": "هل تعلم أن محرك بي إم دبليو إم فايف إي سيكستي من نوع في تن بسعة خمسة لترات، هو المحرك الوحيد في تاريخ سيارات السيدان المستوحى مباشرة من سيارات الفورمولا وان؟ يولد خمسمئة وسبعة أحصنة بصوت يطرب عشاق السرعة!",
-                  "caption": "هل تعتبر محرك V10 في M5 E60 أعظم صوت محرك صنعته BMW؟ 🔥 شاركنا رأيك! #BMW #BMWM5 #V10 #عشاق_السيارات"
+                  "script": "هل تعلم أن محرك بي إم دبليو إم فايف من نوع في تن بسعة خمسة لترات، مستوحى مباشرة من سيارات الفورمولا وان؟ قوة جبارة وصوت يطرب عشاق السرعة في كل مكان!",
+                  "caption": "الأسطورة لا تقبل المساومة 🔥 ما رأيك في وحش BMW M5؟ #BMW #BMWM5 #MPower #سيارات"
               },
               {
-                  "script": "تخفيف الوزن بمقدار مئة كيلوغرام كاملة مع محرك إس فيفتي إيت توين تيربو بقوة خمسمئة وخمسين حصاناً! هكذا صنعت بي إم دبليو نسخة إم فور سي إس إل الأسطورية لتسجل أسرع لفة لسيارة إنتاجية على حلبة نوربورغرينغ!",
-                  "caption": "550 حصان ووزن أخف بـ 100 كجم! هل تتفوق M4 CSL على منافسيها؟ 🏁 #BMWM4 #MPower #سيارات_رياضية"
+                  "script": "هندسة هجومية وانسيابية مصممة خصيصاً للسيطرة على الحلبات! سيارات بي إم دبليو إم فور تجمع بين الوزن الخفيف والقوة الخارقة لتمنحك تجربة قيادة لا مثيل لها!",
+                  "caption": "مُصممة للهيمنة على الطريق والحلبات 🏁 أي جيل من BMW M4 تفضل؟ #BMWM4 #M4CS #عشاق_السيارات"
               },
               {
-                  "script": "في عام ألف وتسعمئة وستة وثمانين، صنعت بي إم دبليو سيارة إم ثري إي ثيرتي خصيصاً لتهيمن على سباقات دي تي إم العالمية! محرك رباعي الأسطوانات خفيف الوزن وتوزيع مثالي جعلها أيقونة لا تتكرر!",
-                  "caption": "من هنا بدأت أسطورة M3 في عام 1986 👑 أي جيل من M3 هو المفضل لديك؟ #BMWM3 #E30 #تاريخ_السيارات"
+                  "script": "منذ انطلاق الفئة الثالثة من بي إم دبليو، وضعت معياراً جديداً للتوازن بين الفخامة والأداء الرياضي اليومي! سيارة تعشق المنعطفات وتمنحك متعة القيادة الحقيقية!",
+                  "caption": "متعة القيادة الحقيقية تبدأ من هنا 👑 شاركنا رأيك في الفئة الثالثة! #BMW #BMW3Series #F30"
               }
           ]
 
@@ -45,62 +47,28 @@ jobs:
               await edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+5%").save("voice.mp3")
           asyncio.run(make_audio())
 
-          media_ready = False
-          try:
-              wiki_api = "https://wikimedia.org" + "/w/api.php"
-              for q in ["filetype:video BMW M3 OR M4 OR M5", "BMW M3 M4 M5 sports car"]:
-                  params = {
-                      "action": "query",
-                      "generator": "search",
-                      "gsrsearch": q,
-                      "gsrnamespace": "6",
-                      "gsrlimit": "15",
-                      "prop": "imageinfo",
-                      "iiprop": "url",
-                      "format": "json"
-                  }
-                  r = requests.get(wiki_api, params=params, headers=UA, timeout=20)
-                  if r.status_code == 200 and r.text.strip().startswith("{"):
-                      pages = list(r.json().get("query", {}).get("pages", {}).values())
-                      urls = [next(iter(p["imageinfo"]))["url"] for p in pages if p.get("imageinfo")]
-                      valid = [u for u in urls if u.lower().endswith((".mp4", ".webm", ".ogv", ".jpg", ".jpeg", ".png"))]
-                      if valid:
-                          chosen = random.choice(valid)
-                          print("🎥 تم جلب الوسائط من ويكيميديا:", chosen)
-                          with requests.get(chosen, headers=UA, stream=True, timeout=60) as dl:
-                              dl.raise_for_status()
-                              with open("raw_media.dat", "wb") as f:
-                                  for chunk in dl.iter_content(8192):
-                                      f.write(chunk)
-                          if chosen.lower().endswith((".jpg", ".jpeg", ".png")):
-                              subprocess.run([
-                                  FFMPEG, "-y", "-loop", "1", "-i", "raw_media.dat", "-i", "voice.mp3",
-                                  "-vf", "scale=1200:2133:force_original_aspect_ratio=increase,crop=1200:2133,zoompan=z=\x27min(zoom+0.0008,1.15)\x27:d=1200:s=1080x1920:fps=25",
-                                  "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "reel.mp4"
-                              ], check=True)
-                          else:
-                              subprocess.run([
-                                  FFMPEG, "-y", "-stream_loop", "-1", "-i", "raw_media.dat", "-i", "voice.mp3",
-                                  "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=25",
-                                  "-map", "0:v:0", "-map", "1:a:0",
-                                  "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "reel.mp4"
-                              ], check=True)
-                          media_ready = True
-                          break
-          except Exception as e:
-              print("⚠️ تعذر جلب الوسائط الخارجية، جاري استخدام التصميم الاحتياطي:", e)
+          # البحث عن صورك المرفوعة في مجلد assets
+          imgs = []
+          for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
+              imgs.extend(glob.glob(f"**/assets/{ext}", recursive=True))
 
-          if not media_ready:
-              img = Image.new("RGB", (1080, 1920), (0, 51, 102))
-              draw = ImageDraw.Draw(img)
-              draw.rectangle((0, 0, 1080, 80), fill=(0, 160, 233))
-              draw.rectangle((0, 80, 1080, 160), fill=(0, 51, 102))
-              draw.rectangle((0, 160, 1080, 240), fill=(226, 0, 26))
-              img.save("bg.png")
-              subprocess.run([
-                  FFMPEG, "-y", "-loop", "1", "-i", "bg.png", "-i", "voice.mp3",
-                  "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "reel.mp4"
-              ], check=True)
+          chosen_img = random.choice(imgs)
+          print("🖼️ جاري استخدام صورتك:", chosen_img)
+
+          # تجهيز الصورة بمقاس الريلز العمودي 1080x1920 مع خلفية ضبابية أنيقة تحافظ على كامل تفاصيل السيارة
+          orig = Image.open(chosen_img).convert("RGB")
+          bg = ImageOps.fit(orig, (1080, 1920), method=Image.Resampling.LANCZOS)
+          fg = ImageOps.contain(orig, (1080, 1400), method=Image.Resampling.LANCZOS)
+          bg.paste(fg, ((1080 - fg.width) // 2, (1920 - fg.height) // 2))
+          bg.save("frame.jpg", quality=95)
+
+          # إضافة حركة تقريب سينمائية (Zoom-in) ودمج الصوت العربي
+          subprocess.run([
+              FFMPEG, "-y", "-loop", "1", "-i", "frame.jpg", "-i", "voice.mp3",
+              "-vf", "scale=1200:2133,zoompan=z=\x27min(zoom+0.0007,1.12)\x27:d=1200:s=1080x1920:fps=25",
+              "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+              "-c:a", "aac", "-shortest", "reel.mp4"
+          ], check=True)
 
           r_acc = requests.get(API + "/accounts", headers=H).json()
           accs = r_acc.get("accounts", r_acc) if isinstance(r_acc, dict) else r_acc
@@ -117,5 +85,5 @@ jobs:
               "platforms": [{"platform": "instagram", "accountId": ig_id, "platformSpecificData": {"contentType": "reels"}}],
               "publishNow": True
           })
-          print("✅ تم نشر الريلز بنجاح:", post.status_code)
+          print("✅ تم نشر الريلز بصورتك بنجاح:", post.status_code)
           '
