@@ -1,0 +1,10 @@
+yt-dlp
+faster-whisper
+edge-tts
+opencv-python
+numpy
+Pillow
+requests
+arabic-reshaper
+python-bidi
+# أداة نظام مطلوبة أيضاً: ffmpeg (و ffprobe) مثبتة على الجهاز
