@@ -9,43 +9,32 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: إنتاج ونشر ريلز BMW احترافية
+      - name: إنتاج ونشر ريلز BMW بفيديو حقيقي
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
-          pip install -q edge-tts requests imageio-ffmpeg Pillow arabic-reshaper python-bidi
+          pip install -q edge-tts requests imageio-ffmpeg
           python3 -c '
           import os, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
-          import arabic_reshaper
-          from bidi.algorithm import get_display
-          from PIL import Image, ImageDraw, ImageFont
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
           KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
+          UA = {"User-Agent": "BMWReelsBot/1.0 (contact@example.com)"}
 
           TOPICS = [
               {
-                  "title": "محرك BMW M5 E60 V10",
-                  "specs": "5.0L V10 | 507 HP | 8,250 RPM",
-                  "script": "هل تعلم أن محرك بي إم دبليو إم فايف إي سيكستي من نوع في تن بسعة خمسة لترات، هو المحرك الوحيد في تاريخ سيارات السيدان المستوحى مباشرة من سيارات الفورمولا وان؟ يولد خمسمئة وسبعة أحصنة ويصل إلى ثمانية آلاف ومئتين وخمسين دورة في الدقيقة بصوت لا يُنسى!",
-                  "caption": "هل تعتبر محرك V10 في M5 E60 أعظم صوت محرك صنعته BMW؟ 🔥 شاركنا رأيك! #BMW #BMWM5 #V10 #عشاق_السيارات",
-                  "color": (0, 51, 102)
+                  "script": "هل تعلم أن محرك بي إم دبليو إم فايف إي سيكستي من نوع في تن بسعة خمسة لترات، هو المحرك الوحيد في تاريخ سيارات السيدان المستوحى مباشرة من سيارات الفورمولا وان؟ يولد خمسمئة وسبعة أحصنة بصوت يطرب عشاق السرعة!",
+                  "caption": "هل تعتبر محرك V10 في M5 E60 أعظم صوت محرك صنعته BMW؟ 🔥 شاركنا رأيك! #BMW #BMWM5 #V10 #عشاق_السيارات"
               },
               {
-                  "title": "وحش الحلبات BMW M4 CSL",
-                  "specs": "3.0L Twin-Turbo S58 | 550 HP | 0-100: 3.7s",
-                  "script": "تخفيف الوزن بمقدار مئة كيلوغرام كاملة مع محرك إس فيفتي إيت توين تيربو بقوة خمسمئة وخمسين حصاناً! هكذا صنعت بي إم دبليو نسخة إم فور سي إس إل الأسطورية لتسجل أسرع لفة لسيارة إنتاجية من الشركة على حلبة نوربورغرينغ الشهيرة!",
-                  "caption": "550 حصان ووزن أخف بـ 100 كجم! هل تتفوق M4 CSL على منافسيها؟ 🏁 #BMWM4 #MPower #سيارات_رياضية",
-                  "color": (160, 10, 30)
+                  "script": "تخفيف الوزن بمقدار مئة كيلوغرام كاملة مع محرك إس فيفتي إيت توين تيربو بقوة خمسمئة وخمسين حصاناً! هكذا صنعت بي إم دبليو نسخة إم فور سي إس إل الأسطورية لتسجل أسرع لفة لسيارة إنتاجية على حلبة نوربورغرينغ!",
+                  "caption": "550 حصان ووزن أخف بـ 100 كجم! هل تتفوق M4 CSL على منافسيها؟ 🏁 #BMWM4 #MPower #سيارات_رياضية"
               },
               {
-                  "title": "أسطورة البدايات BMW M3 E30",
-                  "specs": "2.3L S14 | 1986 LEGEND | DTM CHAMPION",
-                  "script": "في عام ألف وتسعمئة وستة وثمانين، لم تصنع بي إم دبليو سيارة إم ثري إي ثيرتي لتكون مجرد سيارة شارع، بل صنعتها خصيصاً لتهيمن على سباقات دي تي إم العالمية! محرك رباعي الأسطوانات خفيف الوزن وتوزيع مثالي جعلها أيقونة لا تتكرر!",
-                  "caption": "من هنا بدأت أسطورة M3 في عام 1986 👑 أي جيل من M3 هو المفضل لديك؟ #BMWM3 #E30 #تاريخ_السيارات",
-                  "color": (0, 110, 170)
+                  "script": "في عام ألف وتسعمئة وستة وثمانين، صنعت بي إم دبليو سيارة إم ثري إي ثيرتي خصيصاً لتهيمن على سباقات دي تي إم العالمية! محرك رباعي الأسطوانات خفيف الوزن وتوزيع مثالي جعلها أيقونة لا تتكرر!",
+                  "caption": "من هنا بدأت أسطورة M3 في عام 1986 👑 أي جيل من M3 هو المفضل لديك؟ #BMWM3 #E30 #تاريخ_السيارات"
               }
           ]
 
@@ -55,29 +44,23 @@ jobs:
               await edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+5%").save("voice.mp3")
           asyncio.run(make_audio())
 
-          img = Image.new("RGB", (1080, 1920), item["color"])
-          draw = ImageDraw.Draw(img)
-          draw.rectangle((0, 0, 1080, 60), fill=(0, 160, 233))
-          draw.rectangle((0, 60, 1080, 120), fill=(0, 51, 102))
-          draw.rectangle((0, 120, 1080, 180), fill=(226, 0, 26))
+          search_url = "https://wikimedia.org"
+          res = requests.get(search_url, headers=UA, timeout=30).json()
+          pages = list(res.get("query", {}).get("pages", {}).values())
+          vid_urls = [next(iter(p["imageinfo"]))["url"] for p in pages if p.get("imageinfo")]
+          chosen_url = random.choice(vid_urls)
+          print("🎥 جاري تحميل الفيديو الحقيقي:", chosen_url)
 
-          def ar(txt):
-              return get_display(arabic_reshaper.reshape(txt))
-
-          try:
-              font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
-              font_med = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 44)
-          except:
-              font_big = font_med = ImageFont.load_default()
-
-          draw.text((540, 750), ar(item["title"]), fill=(255, 255, 255), font=font_big, anchor="mm")
-          draw.text((540, 920), item["specs"], fill=(0, 210, 255), font=font_med, anchor="mm")
-          draw.text((540, 1650), "@BMW_EMPIRE", fill=(200, 200, 200), font=font_med, anchor="mm")
-          img.save("bg.png")
+          with requests.get(chosen_url, headers=UA, stream=True, timeout=60) as r:
+              r.raise_for_status()
+              with open("raw_car.vid", "wb") as f:
+                  for chunk in r.iter_content(chunk_size=8192):
+                      f.write(chunk)
 
           subprocess.run([
-              FFMPEG, "-y", "-loop", "1", "-i", "bg.png", "-i", "voice.mp3",
-              "-vf", "scale=1200:2133,zoompan=z=\x27min(zoom+0.0008,1.15)\x27:d=1200:s=1080x1920:fps=25",
+              FFMPEG, "-y", "-stream_loop", "-1", "-i", "raw_car.vid", "-i", "voice.mp3",
+              "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=25",
+              "-map", "0:v:0", "-map", "1:a:0",
               "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
               "-c:a", "aac", "-shortest", "reel.mp4"
           ], check=True)
@@ -97,5 +80,5 @@ jobs:
               "platforms": [{"platform": "instagram", "accountId": ig_id, "platformSpecificData": {"contentType": "reels"}}],
               "publishNow": True
           })
-          print("✅ تم النشر بنجاح:", post.status_code)
+          print("✅ تم نشر الريلز الحقيقي بنجاح:", post.status_code)
           '
