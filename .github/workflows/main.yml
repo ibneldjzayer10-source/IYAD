@@ -3,87 +3,148 @@ name: BMW Auto
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */8 * * *'
+    - cron: '0 18 * * *' # النشر يومياً الساعة 7 مساءً بتوقيت الجزائر (وقت الذروة)
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. سحب الملفات والصور
-        uses: actions/checkout@v4
-
-      - name: 2. صناعة الريلز من صورك ونشرها
+      - name: صناعة ريلز احترافي بمونتاج سريع وترجمة عربية سليمة
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
-          ls -la
-          pip install -q edge-tts requests imageio-ffmpeg Pillow
+          pip install -q edge-tts requests imageio-ffmpeg Pillow arabic-reshaper python-bidi
+          curl -sL "https://githubusercontent.com" -o font.ttf
           python3 -c '
           import os, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
-          from PIL import Image, ImageOps, ImageFilter
+          import arabic_reshaper
+          from bidi.algorithm import get_display
+          from PIL import Image, ImageDraw, ImageFont
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
           KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
 
+          MY_VIDEOS = [
+              "https://files.catbox.moe/vxmjih.mp4",
+              "https://files.catbox.moe/rvlqu7.mp4",
+              "https://files.catbox.moe/ev23xv.mp4",
+              "https://files.catbox.moe/enjpgg.mp4",
+              "https://files.catbox.moe/9xv0v3.mp4",
+              "https://files.catbox.moe/c9t4ir.mp4",
+              "https://files.catbox.moe/jhz2ui.mp4",
+          ]
+
           TOPICS = [
               {
-                  "script": "هل تعلم أن محرك بي إم دبليو إم فايف من نوع في تن بسعة خمسة لترات، مستوحى مباشرة من سيارات الفورمولا وان؟ قوة جبارة وصوت يطرب عشاق السرعة في كل مكان!",
-                  "caption": "الأسطورة لا تقبل المساومة 🔥 ما رأيك في وحش BMW M5؟ #BMW #BMWM5 #MPower #سيارات"
+                  "script": "توقف واسمع هذا الوحش! محرك بي إم دبليو إم فايف من نوع في تن بسعة خمسة لترات، مستوحى مباشرة من سيارات الفورمولا وان بقوة خمسمئة وسبعة أحصنة! برأيك هل هو أعظم صوت محرك في التاريخ أم تفضل التيربو الحديث؟",
+                  "caption": "اسمع طرب الـ V10 🔥 برأيك هل M5 E60 أعظم من M5 F90؟ اكتب رأيك في التعليقات! 👇 #BMW #BMWM5 #V10 #عشاق_السيارات"
               },
               {
-                  "script": "هندسة هجومية وانسيابية مصممة خصيصاً للسيطرة على الحلبات! سيارات بي إم دبليو إم فور تجمع بين الوزن الخفيف والقوة الخارقة لتمنحك تجربة قيادة لا مثيل لها!",
-                  "caption": "مُصممة للهيمنة على الطريق والحلبات 🏁 أي جيل من BMW M4 تفضل؟ #BMWM4 #M4CS #عشاق_السيارات"
+                  "script": "مستحيل أن تصدق هذا الرقم! محرك إس فيفتي إيت توين تيربو من بي إم دبليو يتحمل تعديلات تصل لأكثر من ألف حصان دون تغيير القطع الداخلية! وحش هندسي مرعب يسيطر على الشوارع والحلبات!",
+                  "caption": "1000 حصان من محرك S58 بدون تعديل داخلي! 🤯 أي وحش من BMW تختار؟ #S58 #BMWM3 #BMWM4 #تعديل_سيارات"
               },
               {
-                  "script": "منذ انطلاق الفئة الثالثة من بي إم دبليو، وضعت معياراً جديداً للتوازن بين الفخامة والأداء الرياضي اليومي! سيارة تعشق المنعطفات وتمنحك متعة القيادة الحقيقية!",
-                  "caption": "متعة القيادة الحقيقية تبدأ من هنا 👑 شاركنا رأيك في الفئة الثالثة! #BMW #BMW3Series #F30"
+                  "script": "لماذا يعشق المحترفون قيادة بي إم دبليو أكثر من أي سيارة أخرى؟ السر هو التوزيع المثالي للوزن خمسين بالمئة في الأمام وخمسين بالمئة في الخلف! توازن هندسي يجعلك ملك المنعطفات بلا منازع!",
+                  "caption": "توزيع وزن 50/50 هو سر متعة القيادة الحقيقية 👑 منشن صديقك عاشق BMW! #BMW #MPower #هندسة_السيارات"
+              },
+              {
+                  "script": "عندما تجتمع الفخامة الألمانية مع وحشية حلبات السباق! سيارات بي إم دبليو إم باور لا تمنحك مجرد سرعة على الخط المستقيم، بل تعطيك تحكماً أسطورياً في كل منعطف!",
+                  "caption": "هندسة صُممت لعشاق القيادة الحقيقية 🏁 أي طراز من BMW تحلم بامتلاكه؟ #BMW #BMWM #سيارات_رياضية"
               }
           ]
 
           item = random.choice(TOPICS)
 
-          async def make_audio():
-              await edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+5%").save("voice.mp3")
-          asyncio.run(make_audio())
+          # 1. اختيار 3 فيديوهات عشوائية من روابطك لعمل مونتاج سريع الإيقاع (تتغير اللقطة كل 4 ثوانٍ)
+          selected = random.sample(MY_VIDEOS, 3)
+          clip_files = []
+          for idx, url in enumerate(selected):
+              raw_name = f"raw_{idx}.mp4"
+              norm_name = f"norm_{idx}.mp4"
+              with requests.get(url, stream=True, timeout=60) as r:
+                  r.raise_for_status()
+                  with open(raw_name, "wb") as f:
+                      for chunk in r.iter_content(8192):
+                          f.write(chunk)
+              # توحيد المقاس إلى 1080x1920 وأخذ 4.5 ثانية من كل فيديو لضمان إيقاع سريع
+              subprocess.run([
+                  FFMPEG, "-y", "-i", raw_name, "-t", "4.5",
+                  "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1",
+                  "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", norm_name
+              ], check=True)
+              clip_files.append(norm_name)
 
-          # فحص كل الملفات الموجودة واختيار أي ملف يمكن فتحه كصورة (بغض النظر عن الامتداد)
-          imgs = []
-          for root, dirs, files in os.walk("."):
-              if ".git" in root or ".github" in root:
-                  continue
-              for f in files:
-                  if f in ("frame.jpg", "bg.png"):
-                      continue
-                  p = os.path.join(root, f)
-                  try:
-                      with Image.open(p) as im:
-                          im.verify()
-                      imgs.append(p)
-                  except Exception:
-                      pass
+          with open("list.txt", "w") as f:
+              for _ in range(3):
+                  for c in clip_files:
+                      f.write(f"file \x27{c}\x27\n")
 
-          print("📂 الصور المكتشفة:", imgs)
-          if not imgs:
-              raise SystemExit("❌ المستودع لا يحتوي على أي ملف صورة! تأكد أنك في المستودع الصحيح.")
+          subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "base_vid.mp4"], check=True)
 
-          chosen_img = random.choice(imgs)
-          print("🖼️ جاري استخدام صورتك:", chosen_img)
+          # 2. توليد الصوت واستخراج توقيت الكلمات
+          async def generate_voice():
+              communicate = edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+10%")
+              audio_data = bytearray()
+              words = []
+              async for chunk in communicate.stream():
+                  if chunk["type"] == "audio":
+                      audio_data.extend(chunk["data"])
+                  elif chunk["type"] == "WordBoundary":
+                      st = chunk["offset"] / 10_000_000
+                      dur = chunk["duration"] / 10_000_000
+                      words.append({"text": chunk["text"], "start": st, "end": st + dur})
+              with open("voice.mp3", "wb") as f:
+                  f.write(audio_data)
+              return words
 
-          orig = Image.open(chosen_img).convert("RGB")
-          bg = ImageOps.fit(orig, (1080, 1920), method=Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(25))
-          fg = ImageOps.contain(orig, (1080, 1450), method=Image.Resampling.LANCZOS)
-          bg.paste(fg, ((1080 - fg.width) // 2, (1920 - fg.height) // 2))
-          bg.save("frame.jpg", quality=95)
+          words = asyncio.run(generate_voice())
+
+          captions = []
+          for i in range(0, len(words), 3):
+              group = words[i:i+3]
+              phrase = " ".join(w["text"] for w in group)
+              st = next(iter(group))["start"]
+              en = group[-1]["end"] + 0.15
+              captions.append((phrase, st, en))
+
+          # 3. رسم الترجمة العربية السليمة
+          font = ImageFont.truetype("font.ttf", 68)
+          sub_files = []
+          for idx, (phrase, st, en) in enumerate(captions):
+              img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+              draw = ImageDraw.Draw(img)
+              bidi_text = get_display(arabic_reshaper.reshape(phrase))
+              b = draw.textbbox((540, 1360), bidi_text, font=font, anchor="mm")
+              x0, y0, x1, y1 = b
+              draw.rounded_rectangle((x0 - 24, y0 - 20, x1 + 24, y1 + 20), radius=20, fill=(0, 15, 35, 215))
+              draw.text((540, 1360), bidi_text, font=font, fill=(255, 255, 255, 255), anchor="mm", stroke_width=3, stroke_fill=(0, 0, 0, 255))
+              fname = f"sub_{idx}.png"
+              img.save(fname)
+              sub_files.append((fname, st, en))
+
+          inputs = ["-y", "-i", "base_vid.mp4", "-i", "voice.mp3"]
+          for fname, _, _ in sub_files:
+              inputs.extend(["-i", fname])
+
+          filter_parts = []
+          last_v = "0:v"
+          for idx, (_, st, en) in enumerate(sub_files):
+              inp_idx = idx + 2
+              next_v = f"v{idx+1}"
+              filter_parts.append(f"[{last_v}][{inp_idx}:v]overlay=0:0:enable=\x27between(t,{st:.2f},{en:.2f})\x27[{next_v}]")
+              last_v = next_v
 
           subprocess.run([
-              FFMPEG, "-y", "-loop", "1", "-i", "frame.jpg", "-i", "voice.mp3",
-              "-vf", "scale=1200:2133,zoompan=z=\x27min(zoom+0.0007,1.12)\x27:d=1200:s=1080x1920:fps=25",
+              FFMPEG] + inputs + [
+              "-filter_complex", ";".join(filter_parts),
+              "-map", f"[{last_v}]", "-map", "1:a",
               "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
               "-c:a", "aac", "-shortest", "reel.mp4"
           ], check=True)
 
+          # 4. النشر عبر Zernio
           r_acc = requests.get(API + "/accounts", headers=H).json()
           accs = r_acc.get("accounts", r_acc) if isinstance(r_acc, dict) else r_acc
           ig_id = next(a.get("_id") or a.get("id") for a in accs if a.get("platform") == "instagram")
@@ -99,5 +160,5 @@ jobs:
               "platforms": [{"platform": "instagram", "accountId": ig_id, "platformSpecificData": {"contentType": "reels"}}],
               "publishNow": True
           })
-          print("✅ تم نشر الريلز بصورتك بنجاح:", post.status_code)
+          print("✅ تم نشر الريلز الاحترافي بمونتاج سريع بنجاح:", post.status_code)
           '
