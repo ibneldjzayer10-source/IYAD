@@ -13,11 +13,9 @@ jobs:
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
-          pip install -q edge-tts requests imageio-ffmpeg Pillow arabic-reshaper python-bidi gdown
+          pip install -q edge-tts requests imageio-ffmpeg Pillow gdown
           python3 -c '
           import os, re, glob, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg, gdown
-          import arabic_reshaper
-          from bidi.algorithm import get_display
           from PIL import Image, ImageDraw, ImageFont
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
@@ -86,7 +84,7 @@ jobs:
           chunks = [" ".join(raw_words[i:i+3]) for i in range(0, len(raw_words), 3)]
           step = total_dur / len(chunks)
 
-          # 3. رسم شرائح الترجمة العربية السليمة (مقاس 720x1280 متناسق مع الفيديو)
+          # 3. رسم الترجمة العربية الطبيعية مباشرة (بدون عكس)
           font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
           sub_files = []
           for idx, phrase in enumerate(chunks):
@@ -94,11 +92,10 @@ jobs:
               en = (idx + 1) * step
               img = Image.new("RGBA", (720, 1280), (0, 0, 0, 0))
               draw = ImageDraw.Draw(img)
-              bidi_text = get_display(arabic_reshaper.reshape(phrase))
-              b = draw.textbbox((360, 910), bidi_text, font=font, anchor="mm")
+              b = draw.textbbox((360, 910), phrase, font=font, anchor="mm", direction="rtl")
               x0, y0, x1, y1 = b
               draw.rounded_rectangle((x0 - 18, y0 - 14, x1 + 18, y1 + 14), radius=16, fill=(0, 15, 35, 220))
-              draw.text((360, 910), bidi_text, font=font, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+              draw.text((360, 910), phrase, font=font, fill=(255, 255, 255, 255), anchor="mm", direction="rtl", stroke_width=2, stroke_fill=(0, 0, 0, 255))
               fname = f"sub_{idx}.png"
               img.save(fname)
               sub_files.append((fname, st, en))
@@ -123,8 +120,6 @@ jobs:
               "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"
           ], check=True)
 
-          print("📦 حجم الفيديو النهائي:", round(os.path.getsize("reel.mp4") / (1024*1024), 2), "MB")
-
           # 4. النشر عبر Zernio
           r_acc = requests.get(API + "/accounts", headers=H).json()
           accs = r_acc.get("accounts", r_acc) if isinstance(r_acc, dict) else r_acc
@@ -132,7 +127,6 @@ jobs:
 
           with open("reel.mp4", "rb") as f:
               r_up = requests.post(API + "/media", headers=H, files={"files": ("reel.mp4", f, "video/mp4")}, timeout=180)
-          print("📤 حالة الرفع:", r_up.status_code)
           up = r_up.json()
           flist = up.get("files") or up.get("media") or [up]
           vid_url = next(iter(flist))["url"]
@@ -143,5 +137,5 @@ jobs:
               "platforms": [{"platform": "instagram", "accountId": ig_id, "platformSpecificData": {"contentType": "reels"}}],
               "publishNow": True
           })
-          print("✅ تم نشر الريلز الاحترافي بمونتاج سريع بنجاح:", post.status_code)
+          print("✅ تم نشر الريلز بالكتابة العربية الصحيحة بنجاح:", post.status_code)
           '
