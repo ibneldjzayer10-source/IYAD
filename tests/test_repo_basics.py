@@ -43,6 +43,7 @@ class PublishScriptTests(unittest.TestCase):
         self.assertIn("already_published", self.src)  # منع نشر الوصف المكرر
         self.assertIn("status_code >= 300", self.src)  # فحص حقيقي لردود API
         self.assertIn("os.chdir(ROOT)", self.src)
+        self.assertIn("RIGHTS_ENFORCE", self.src)  # مفتاح منع المحتوى غير المعتمد
 
     def test_workflow_calls_script(self):
         wf_path = ROOT / ".github" / "workflows" / "main.yml"
