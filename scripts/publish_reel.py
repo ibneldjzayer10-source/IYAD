@@ -3,6 +3,7 @@
 
 يقرأ topics.txt من جذر المستودع، يبني الفيديو، وينشر عبر Zernio/Late API.
 بدون ZERNIO_KEY وبدون DRY_RUN=1 يُنهي فوراً؛ مع DRY_RUN=1 يبني فقط ولا ينشر."""
+import json
 import os
 from pathlib import Path
 
@@ -110,6 +111,33 @@ if not selected:
     fail(f"لا توجد فيديوهات في المجلد (عدد الملفات {len(all_vids)}) — تحقق من FOLDER_ID")
 print("[videos] " + "; ".join(selected), flush=True)
 
+def rights_gate(paths):
+    """فحص الحقوق: يقرأ rights_report.json إن وُجد ويمنع عند RIGHTS_ENFORCE=1."""
+    report = {}
+    rp = ROOT / "rights_report.json"
+    if rp.exists():
+        try:
+            report = json.loads(rp.read_text(encoding="utf-8"))
+        except ValueError:
+            print("[rights] تعذّر قراءة rights_report.json", flush=True)
+    enforce = os.environ.get("RIGHTS_ENFORCE", "0") == "1"
+    uncleared = []
+    for v in paths:
+        stem = Path(v).stem
+        entry = report.get(stem)
+        status = "معتمد" if (entry and entry.get("cleared")) else ("غير معتمد" if entry else "غير مفحوص")
+        print(f"[rights] {stem}: {status}", flush=True)
+        if status != "معتمد":
+            uncleared.append(stem)
+    if uncleared and enforce:
+        fail(f"RIGHTS_ENFORCE=1 — مقاطع غير معتمدة: {', '.join(uncleared)}")
+    if uncleared:
+        print(f"[rights] تحذير: {len(uncleared)} مقطعاً بلا ترخيص موثّق — RIGHTS_ENFORCE=1 ليُمنع النشر", flush=True)
+
+
+rights_gate(selected)
+
+
 clip_files = []
 for i, vpath in enumerate(selected):
     norm = f"norm_{i}.mp4"
@@ -188,6 +216,26 @@ r = subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "aud_list.
 if r.returncode != 0:
     fail(f"concat الصوت فشل — {r.stderr[-400:]}")
 
+def _media_dur(path):
+    info = subprocess.run([FFMPEG, "-i", path], capture_output=True, text=True).stderr
+    m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", info)
+    return (int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))) if m else 0.0
+
+
+_vd, _bd = _media_dur("voice.mp3"), _media_dur("base_vid.mp4")
+if _vd > _bd:  # نص أطول من الفيديو: نوسّع التكرار بدل قطع الصوت عبر -shortest
+    reps = int(4 * _vd / max(_bd, 1.0)) + 1
+    with open("list.txt", "w") as fh:
+        for _ in range(reps):
+            for c in clip_files:
+                fh.write(f"file '{c}'\n")
+    r = subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "list.txt",
+                        "-c", "copy", "base_vid.mp4"], capture_output=True, text=True)
+    if r.returncode != 0:
+        fail(f"توسيع base_vid فشل — {r.stderr[-400:]}")
+    print(f"[guard] وسّع الفيديو {_bd:.1f}s ← {_vd:.1f}s ليطابق التعليق الصوتي", flush=True)
+
+
 FONT_FILE = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 if not os.path.exists(FONT_FILE):
     alt = sorted(glob.glob("/usr/share/fonts/**/*.ttf", recursive=True))
@@ -218,7 +266,7 @@ for i, (_, st, en) in enumerate(sub_files):
 
 r = subprocess.run([FFMPEG] + inputs + ["-filter_complex", ";".join(filters),
                     "-map", f"[{last_v}]", "-map", "1:a", "-c:v", "libx264", "-preset", "fast",
-                    "-b:v", "450k", "-maxrate", "520k", "-bufsize", "900k", "-pix_fmt", "yuv420p",
+                    "-b:v", "2500k", "-maxrate", "3200k", "-bufsize", "5000k", "-pix_fmt", "yuv420p",
                     "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"], capture_output=True, text=True)
 if r.returncode != 0:
     fail(f"دمج reel.mp4 فشل — {r.stderr[-600:]}")

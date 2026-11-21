@@ -9,7 +9,7 @@ from collections import defaultdict
 from common import *
 
 log, metrics = load("published_log.json", []), load("metrics.json", {})
-BASE, KEY = os.environ.get("LATE_BASE_URL", "https://getlate.dev/api/v1"), os.environ.get("LATE_API_KEY")
+BASE, KEY = os.environ.get("LATE_BASE_URL", "https://zernio.com/api/v1"), os.environ.get("LATE_API_KEY")
 if KEY:
     for p in log:
         if p["post_id"] and p["post_id"] not in metrics:

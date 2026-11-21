@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: bmw-auto-post
@@ -22,11 +23,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: صناعة ونشر ريلز BMW متزامن بدقة
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
           DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+          RIGHTS_ENFORCE: ${{ vars.RIGHTS_ENFORCE || '0' }}
         run: |
           pip install -q edge-tts==7.3.1 requests==2.34.2 imageio-ffmpeg==0.8.1 Pillow==13.0.0 gdown==6.5.2
           python3 -u scripts/publish_reel.py
+      - name: إشعار بالفشل (issue)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="[BMW Auto] فشل تشغيل النشر"
+          EXIST=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "BMW Auto in:title" --json number --jq '.[0].number // empty')
+          BODY="فشل تشغيل ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} (run #${GITHUB_RUN_NUMBER}) — راجع السجلات، ويمكنك التشخيص بتشغيل dry_run."
+          if [ -n "$EXIST" ]; then
+            gh issue comment "$EXIST" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
