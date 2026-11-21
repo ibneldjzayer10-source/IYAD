@@ -61,8 +61,8 @@ jobs:
               norm_name = f"norm_{idx}.mp4"
               subprocess.run([
                   FFMPEG, "-y", "-i", vpath, "-t", "4.5",
-                  "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1",
-                  "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p", norm_name
+                  "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1",
+                  "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26", "-pix_fmt", "yuv420p", norm_name
               ], check=True)
               clip_files.append(norm_name)
 
@@ -86,19 +86,19 @@ jobs:
           chunks = [" ".join(raw_words[i:i+3]) for i in range(0, len(raw_words), 3)]
           step = total_dur / len(chunks)
 
-          # 3. رسم شرائح الترجمة العربية السليمة
-          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
+          # 3. رسم شرائح الترجمة العربية السليمة (مقاس 720x1280 متناسق مع الفيديو)
+          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
           sub_files = []
           for idx, phrase in enumerate(chunks):
               st = idx * step
               en = (idx + 1) * step
-              img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+              img = Image.new("RGBA", (720, 1280), (0, 0, 0, 0))
               draw = ImageDraw.Draw(img)
               bidi_text = get_display(arabic_reshaper.reshape(phrase))
-              b = draw.textbbox((540, 1360), bidi_text, font=font, anchor="mm")
+              b = draw.textbbox((360, 910), bidi_text, font=font, anchor="mm")
               x0, y0, x1, y1 = b
-              draw.rounded_rectangle((x0 - 24, y0 - 20, x1 + 24, y1 + 20), radius=20, fill=(0, 15, 35, 215))
-              draw.text((540, 1360), bidi_text, font=font, fill=(255, 255, 255, 255), anchor="mm", stroke_width=3, stroke_fill=(0, 0, 0, 255))
+              draw.rounded_rectangle((x0 - 18, y0 - 14, x1 + 18, y1 + 14), radius=16, fill=(0, 15, 35, 220))
+              draw.text((360, 910), bidi_text, font=font, fill=(255, 255, 255, 255), anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0, 255))
               fname = f"sub_{idx}.png"
               img.save(fname)
               sub_files.append((fname, st, en))
@@ -119,8 +119,8 @@ jobs:
               FFMPEG] + inputs + [
               "-filter_complex", ";".join(filter_parts),
               "-map", f"[{last_v}]", "-map", "1:a",
-              "-c:v", "libx264", "-preset", "fast", "-crf", "28", "-maxrate", "3000k", "-bufsize", "6000k", "-pix_fmt", "yuv420p",
-              "-c:a", "aac", "-b:a", "128k", "-shortest", "reel.mp4"
+              "-c:v", "libx264", "-preset", "fast", "-b:v", "1100k", "-maxrate", "1300k", "-bufsize", "2000k", "-pix_fmt", "yuv420p",
+              "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"
           ], check=True)
 
           print("📦 حجم الفيديو النهائي:", round(os.path.getsize("reel.mp4") / (1024*1024), 2), "MB")
@@ -132,7 +132,7 @@ jobs:
 
           with open("reel.mp4", "rb") as f:
               r_up = requests.post(API + "/media", headers=H, files={"files": ("reel.mp4", f, "video/mp4")}, timeout=180)
-          print("📤 حالة الرفع:", r_up.status_code, r_up.text[:200])
+          print("📤 حالة الرفع:", r_up.status_code)
           up = r_up.json()
           flist = up.get("files") or up.get("media") or [up]
           vid_url = next(iter(flist))["url"]
