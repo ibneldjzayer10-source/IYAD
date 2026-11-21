@@ -42,4 +42,3 @@ txt = md.read_text(encoding="utf-8")
 md.write_text(re.sub(r"<!-- AUTO:TOPICS -->.*?<!-- /AUTO:TOPICS -->", lambda _: block, txt, flags=re.S), encoding="utf-8")
 print("تم تحديث CLAUDE.md —", len(ranked), "موضوع")
 ```
-```

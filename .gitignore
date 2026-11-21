@@ -1,0 +1,35 @@
+# ===== أسرار — لا ترفعها أبداً =====
+.env
+**/.env
+
+# ===== مخرجات خط الأنابيب المحلي =====
+bmw-empire/bmw-empire/01_raw_media/
+bmw-empire/bmw-empire/02_transcripts/
+bmw-empire/bmw-empire/03_sliced_clips/
+bmw-empire/bmw-empire/04_final_reels/
+bmw-empire/bmw-empire/05_published/
+bmw-empire/bmw-empire/published_log.json
+bmw-empire/bmw-empire/metrics.json
+
+# ===== مخرجات سكربت النشر (عند تشغيله محلياً من الجذر) =====
+/gdrive_vids/
+/norm_*.mp4
+/list.txt
+/aud_list.txt
+/voice.mp3
+/seg_*.mp3
+/pad_*.mp3
+/sub_*.png
+/base_vid.mp4
+/reel.mp4
+
+# ===== Python =====
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# ===== نظام =====
+.DS_Store
+Thumbs.db

@@ -25,4 +25,3 @@ for cm in load("comments.json", []):
 save("replies.json", out)
 print(len(out), "رد في replies.json — راجعها قبل النشر")
 ```
-```
