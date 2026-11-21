@@ -3,7 +3,7 @@ name: BMW Auto
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 18 * * *' # النشر يومياً الساعة 7 مساءً بتوقيت الجزائر
+    - cron: '0 18 * * *'
 
 jobs:
   run:
@@ -15,7 +15,7 @@ jobs:
         run: |
           pip install -q edge-tts requests imageio-ffmpeg Pillow arabic-reshaper python-bidi gdown
           python3 -c '
-          import os, glob, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg, gdown
+          import os, re, glob, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg, gdown
           import arabic_reshaper
           from bidi.algorithm import get_display
           from PIL import Image, ImageDraw, ImageFont
@@ -47,16 +47,13 @@ jobs:
 
           item = random.choice(TOPICS)
 
-          # 1. تحميل الفيديوهات من مجلد Google Drive الخاص بك
+          # 1. تحميل الفيديوهات من Google Drive
           os.makedirs("gdrive_vids", exist_ok=True)
           gdown.download_folder(id=FOLDER_ID, output="gdrive_vids", quiet=True, use_cookies=False)
 
           all_vids = []
           for ext in ("*.mp4", "*.mov", "*.MP4", "*.MOV"):
               all_vids.extend(glob.glob(f"gdrive_vids/**/{ext}", recursive=True))
-
-          if not all_vids:
-              raise SystemExit("❌ لم يتم العثور على فيديوهات في المجلد!")
 
           selected = random.sample(all_vids, min(3, len(all_vids)))
           clip_files = []
@@ -76,36 +73,26 @@ jobs:
 
           subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "base_vid.mp4"], check=True)
 
-          # 2. توليد الصوت واستخراج توقيت الكلمات
+          # 2. توليد الصوت وحساب مدته الحقيقية بالثواني
           async def generate_voice():
-              communicate = edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+10%")
-              audio_data = bytearray()
-              words = []
-              async for chunk in communicate.stream():
-                  if chunk["type"] == "audio":
-                      audio_data.extend(chunk["data"])
-                  elif chunk["type"] == "WordBoundary":
-                      st = chunk["offset"] / 10_000_000
-                      dur = chunk["duration"] / 10_000_000
-                      words.append({"text": chunk["text"], "start": st, "end": st + dur})
-              with open("voice.mp3", "wb") as f:
-                  f.write(audio_data)
-              return words
+              await edge_tts.Communicate(item["script"], "ar-SA-HamedNeural", rate="+10%").save("voice.mp3")
+          asyncio.run(generate_voice())
 
-          words = asyncio.run(generate_voice())
+          info = subprocess.run([FFMPEG, "-i", "voice.mp3"], capture_output=True, text=True).stderr
+          m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", info)
+          total_dur = int(m.group(1))*3600 + int(m.group(2))*60 + float(m.group(3)) if m else 18.0
 
-          captions = []
-          for i in range(0, len(words), 3):
-              group = words[i:i+3]
-              phrase = " ".join(w["text"] for w in group)
-              st = next(iter(group))["start"]
-              en = group[-1]["end"] + 0.15
-              captions.append((phrase, st, en))
+          # تقسيم النص إلى شرائح من 3 كلمات وتوزيع توقيتها بدقة على طول الصوت
+          raw_words = item["script"].split()
+          chunks = [" ".join(raw_words[i:i+3]) for i in range(0, len(raw_words), 3)]
+          step = total_dur / len(chunks)
 
-          # 3. رسم الترجمة العربية السليمة
-          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 62)
+          # 3. رسم شرائح الترجمة العربية السليمة
+          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
           sub_files = []
-          for idx, (phrase, st, en) in enumerate(captions):
+          for idx, phrase in enumerate(chunks):
+              st = idx * step
+              en = (idx + 1) * step
               img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
               draw = ImageDraw.Draw(img)
               bidi_text = get_display(arabic_reshaper.reshape(phrase))
