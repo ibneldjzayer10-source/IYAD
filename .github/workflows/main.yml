@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: صناعة ونشر ريلز BMW متطابق
+      - name: صناعة ونشر ريلز BMW احترافي (45-50 ثانية)
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
@@ -31,7 +31,6 @@ jobs:
           idx = (now.timetuple().tm_yday * 3 + slot) % len(lines)
           script_text, caption_text, tag_str = [x.strip() for x in lines[idx].split("|")]
           tags = [t.strip().lower() for t in tag_str.split(",")]
-          print(f"📌 الحلقة {idx+1}/{len(lines)} | الوسوم: {tags}")
 
           os.makedirs("gdrive_vids", exist_ok=True)
           gdown.download_folder(id=FOLDER_ID, output="gdrive_vids", quiet=True, use_cookies=False)
@@ -42,42 +41,43 @@ jobs:
 
           matched = [v for v in all_vids if any(t in v.lower() for t in tags)]
           others = [v for v in all_vids if v not in matched]
-          selected = random.sample(matched, min(3, len(matched))) if matched else []
-          if len(selected) < 3 and others:
-              selected.extend(random.sample(others, min(3 - len(selected), len(others))))
+          selected = random.sample(matched, min(4, len(matched))) if matched else []
+          if len(selected) < 4 and others:
+              selected.extend(random.sample(others, min(4 - len(selected), len(others))))
 
           clip_files = []
           for i, vpath in enumerate(selected):
               norm = f"norm_{i}.mp4"
-              subprocess.run([FFMPEG, "-y", "-i", vpath, "-t", "4.5", "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26", "-pix_fmt", "yuv420p", norm], check=True)
+              subprocess.run([FFMPEG, "-y", "-i", vpath, "-t", "5.0", "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26", "-pix_fmt", "yuv420p", norm], check=True)
               clip_files.append(norm)
 
           with open("list.txt", "w") as f:
-              for _ in range(3):
+              for _ in range(4):
                   for c in clip_files:
                       f.write(f"file '{c}'\n")
           subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "base_vid.mp4"], check=True)
 
           async def make_voice():
-              await edge_tts.Communicate(script_text, "ar-SA-HamedNeural", rate="+10%").save("voice.mp3")
+              await edge_tts.Communicate(script_text, "ar-SA-HamedNeural", rate="-5%").save("voice.mp3")
           asyncio.run(make_voice())
 
           info = subprocess.run([FFMPEG, "-i", "voice.mp3"], capture_output=True, text=True).stderr
           m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", info)
-          total_dur = int(m.group(1))*3600 + int(m.group(2))*60 + float(m.group(3)) if m else 18.0
+          total_dur = int(m.group(1))*3600 + int(m.group(2))*60 + float(m.group(3)) if m else 45.0
+          print(f"⏱️ مدة الفيديو الناتج: {total_dur:.1f} ثانية")
 
-          words = script_text.split()
-          chunks = [" ".join(words[i:i+3]) for i in range(0, len(words), 3)]
+          clean_words = [w for w in script_text.replace("...", "").split() if w]
+          chunks = ["  ".join(clean_words[i:i+3]) for i in range(0, len(clean_words), 3)]
           step = total_dur / len(chunks)
 
-          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
+          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)
           sub_files = []
           for i, phrase in enumerate(chunks):
               st, en = i * step, (i + 1) * step
               img = Image.new("RGBA", (720, 1280), (0, 0, 0, 0))
               draw = ImageDraw.Draw(img)
               x0, y0, x1, y1 = draw.textbbox((360, 910), phrase, font=font, anchor="mm", direction="rtl")
-              draw.rounded_rectangle((x0 - 18, y0 - 14, x1 + 18, y1 + 14), radius=16, fill=(0, 15, 35, 220))
+              draw.rounded_rectangle((x0 - 20, y0 - 14, x1 + 20, y1 + 14), radius=16, fill=(0, 15, 35, 220))
               draw.text((360, 910), phrase, font=font, fill=(255, 255, 255, 255), anchor="mm", direction="rtl", stroke_width=2, stroke_fill=(0, 0, 0, 255))
               fname = f"sub_{i}.png"
               img.save(fname)
@@ -90,7 +90,7 @@ jobs:
               filters.append(f"[{last_v}][{i+2}:v]overlay=0:0:enable='between(t,{st:.2f},{en:.2f})'[v{i+1}]")
               last_v = f"v{i+1}"
 
-          subprocess.run([FFMPEG] + inputs + ["-filter_complex", ";".join(filters), "-map", f"[{last_v}]", "-map", "1:a", "-c:v", "libx264", "-preset", "fast", "-b:v", "1100k", "-maxrate", "1300k", "-bufsize", "2000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"], check=True)
+          subprocess.run([FFMPEG] + inputs + ["-filter_complex", ";".join(filters), "-map", f"[{last_v}]", "-map", "1:a", "-c:v", "libx264", "-preset", "fast", "-b:v", "450k", "-maxrate", "520k", "-bufsize", "900k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"], check=True)
 
           r_acc = requests.get(API + "/accounts", headers=H).json()
           accs = r_acc.get("accounts", r_acc) if isinstance(r_acc, dict) else r_acc
