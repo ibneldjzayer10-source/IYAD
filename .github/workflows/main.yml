@@ -57,14 +57,12 @@ jobs:
                       f.write(f"file '{c}'\n")
           subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "base_vid.mp4"], check=True)
 
-          # تقسيم النص إلى جمل قصيرة (3-4 كلمات) لإضافة وقفة تنفس طبيعية وتزامن دقيق
           sentences = [s.strip() for s in re.split(r'(?<=[.!؟،])\s+', script_text) if s.strip()]
           seg_audios = []
           timings = []
-          curr_t = 0.0
 
           async def build_synced_audio():
-              nonlocal curr_t
+              curr_t = 0.0
               for i, sent in enumerate(sentences):
                   seg_mp3 = f"seg_{i}.mp3"
                   await edge_tts.Communicate(sent, "ar-SA-HamedNeural", rate="-5%").save(seg_mp3)
@@ -72,14 +70,12 @@ jobs:
                   m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", info)
                   dur = int(m.group(1))*3600 + int(m.group(2))*60 + float(m.group(3)) if m else 2.5
 
-                  # تقسيم الجملة الطويلة إلى شرائح من 4 كلمات متزامنة مع مدة الجملة نفسها
                   words = sent.split()
                   chunks = ["  ".join(words[j:j+4]) for j in range(0, len(words), 4)]
                   sub_dur = dur / len(chunks)
                   for k, ch in enumerate(chunks):
                       timings.append((ch, curr_t + k * sub_dur, curr_t + (k + 1) * sub_dur))
 
-                  # إضافة صمت قصير (0.35 ثانية) كوقفة تنفس طبيعية بعد كل جملة
                   pad_mp3 = f"pad_{i}.mp3"
                   subprocess.run([FFMPEG, "-y", "-i", seg_mp3, "-af", "apad=pad_dur=0.35", "-c:a", "libmp3lame", pad_mp3], check=True)
                   seg_audios.append(pad_mp3)
