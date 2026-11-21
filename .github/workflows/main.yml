@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: صناعة ونشر ريلز BMW احترافي (45-50 ثانية)
+      - name: صناعة ونشر ريلز BMW متزامن بدقة
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
@@ -57,27 +57,48 @@ jobs:
                       f.write(f"file '{c}'\n")
           subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "base_vid.mp4"], check=True)
 
-          async def make_voice():
-              await edge_tts.Communicate(script_text, "ar-SA-HamedNeural", rate="-5%").save("voice.mp3")
-          asyncio.run(make_voice())
+          # تقسيم النص إلى جمل قصيرة (3-4 كلمات) لإضافة وقفة تنفس طبيعية وتزامن دقيق
+          sentences = [s.strip() for s in re.split(r'(?<=[.!؟،])\s+', script_text) if s.strip()]
+          seg_audios = []
+          timings = []
+          curr_t = 0.0
 
-          info = subprocess.run([FFMPEG, "-i", "voice.mp3"], capture_output=True, text=True).stderr
-          m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", info)
-          total_dur = int(m.group(1))*3600 + int(m.group(2))*60 + float(m.group(3)) if m else 45.0
-          print(f"⏱️ مدة الفيديو الناتج: {total_dur:.1f} ثانية")
+          async def build_synced_audio():
+              nonlocal curr_t
+              for i, sent in enumerate(sentences):
+                  seg_mp3 = f"seg_{i}.mp3"
+                  await edge_tts.Communicate(sent, "ar-SA-HamedNeural", rate="-5%").save(seg_mp3)
+                  info = subprocess.run([FFMPEG, "-i", seg_mp3], capture_output=True, text=True).stderr
+                  m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", info)
+                  dur = int(m.group(1))*3600 + int(m.group(2))*60 + float(m.group(3)) if m else 2.5
 
-          clean_words = [w for w in script_text.replace("...", "").split() if w]
-          chunks = ["  ".join(clean_words[i:i+3]) for i in range(0, len(clean_words), 3)]
-          step = total_dur / len(chunks)
+                  # تقسيم الجملة الطويلة إلى شرائح من 4 كلمات متزامنة مع مدة الجملة نفسها
+                  words = sent.split()
+                  chunks = ["  ".join(words[j:j+4]) for j in range(0, len(words), 4)]
+                  sub_dur = dur / len(chunks)
+                  for k, ch in enumerate(chunks):
+                      timings.append((ch, curr_t + k * sub_dur, curr_t + (k + 1) * sub_dur))
 
-          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)
+                  # إضافة صمت قصير (0.35 ثانية) كوقفة تنفس طبيعية بعد كل جملة
+                  pad_mp3 = f"pad_{i}.mp3"
+                  subprocess.run([FFMPEG, "-y", "-i", seg_mp3, "-af", "apad=pad_dur=0.35", "-c:a", "libmp3lame", pad_mp3], check=True)
+                  seg_audios.append(pad_mp3)
+                  curr_t += dur + 0.35
+
+          asyncio.run(build_synced_audio())
+
+          with open("aud_list.txt", "w") as f:
+              for a in seg_audios:
+                  f.write(f"file '{a}'\n")
+          subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "aud_list.txt", "-c", "copy", "voice.mp3"], check=True)
+
+          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
           sub_files = []
-          for i, phrase in enumerate(chunks):
-              st, en = i * step, (i + 1) * step
+          for i, (phrase, st, en) in enumerate(timings):
               img = Image.new("RGBA", (720, 1280), (0, 0, 0, 0))
               draw = ImageDraw.Draw(img)
               x0, y0, x1, y1 = draw.textbbox((360, 910), phrase, font=font, anchor="mm", direction="rtl")
-              draw.rounded_rectangle((x0 - 20, y0 - 14, x1 + 20, y1 + 14), radius=16, fill=(0, 15, 35, 220))
+              draw.rounded_rectangle((x0 - 20, y0 - 14, x1 + 20, y1 + 14), radius=16, fill=(0, 15, 35, 225))
               draw.text((360, 910), phrase, font=font, fill=(255, 255, 255, 255), anchor="mm", direction="rtl", stroke_width=2, stroke_fill=(0, 0, 0, 255))
               fname = f"sub_{i}.png"
               img.save(fname)
