@@ -112,8 +112,9 @@ jobs:
           # ---------- بناء الفيديو ----------
           os.makedirs("gdrive_vids", exist_ok=True)
           try:
+              # gdown مثبتة بـ 6.5.2 أعلى: حُذف remaining_ok في v6 (اكتُفي بلا حد 50 ملفاً)
               gdown.download_folder(id=FOLDER_ID, output="gdrive_vids", quiet=True,
-                                    use_cookies=False, remaining_ok=True)
+                                    use_cookies=False, retries=3)
           except Exception as e:
               fail(f"تنزيل مجلد Google Drive فشل (تحقق من المشاركة/الحصالة): {e}")
 
