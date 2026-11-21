@@ -2,38 +2,120 @@ name: BMW Auto
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'تجربة: بناء الفيديو بدون نشر على إنستغرام'
+        type: boolean
+        default: false
   schedule:
     - cron: '0 11,16,20 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bmw-auto-post
+  cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: صناعة ونشر ريلز BMW متزامن بدقة
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
         run: |
-          pip install -q edge-tts requests imageio-ffmpeg Pillow gdown
-          python3 - << 'EOF'
-          import os, re, glob, random, datetime, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg, gdown
+          pip install -q edge-tts==7.3.1 requests==2.34.2 imageio-ffmpeg==0.8.1 Pillow==13.0.0 gdown==6.5.2
+          python3 -u - << 'EOF'
+          import os, re, glob, random, datetime, asyncio, sys
+          import edge_tts, subprocess, requests, imageio_ffmpeg, gdown
           from PIL import Image, ImageDraw, ImageFont
 
           FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
-          KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
-          H = {"Authorization": f"Bearer {KEY}"}
           FOLDER_ID = "1KpnN7wch32bfzp5biG3tBJ5PMawWPxTQ"
+          KEY = os.environ.get("ZERNIO_KEY")
+          DRY = os.environ.get("DRY_RUN", "0") == "1"
 
-          lines = [l.strip() for l in open("topics.txt", encoding="utf-8") if "|" in l]
-          now = datetime.datetime.utcnow()
+          if not KEY and not DRY:
+              sys.exit("ZERNIO_KEY غير مضبوط في Settings > Secrets and variables > Actions")
+          H = {"Authorization": f"Bearer {KEY}"} if KEY else {}
+          print(f"[start] dry_run={DRY} utc={datetime.datetime.now(datetime.timezone.utc).isoformat()}", flush=True)
+
+
+          def fail(msg):
+              sys.exit(f"❌ {msg}")
+
+
+          def api_call(fn, what):
+              try:
+                  r = fn()
+              except requests.RequestException as e:
+                  fail(f"{what}: خطأ اتصال — {e}")
+              if r.status_code >= 300:
+                  fail(f"{what}: HTTP {r.status_code} — {r.text[:300]}")
+              try:
+                  return r.json()
+              except ValueError:
+                  fail(f"{what}: رد غير JSON — {r.text[:300]}")
+
+          # ---------- اختيار الموضوع ----------
+          with open("topics.txt", encoding="utf-8") as fh:
+              lines = [ln.strip() for ln in fh if "|" in ln]
+          if not lines:
+              fail("topics.txt فارغ أو لا يحتوي أسطراً تحتوي على |")
+
+          now = datetime.datetime.now(datetime.timezone.utc)
           slot = 0 if now.hour < 14 else (1 if now.hour < 18 else 2)
           idx = (now.timetuple().tm_yday * 3 + slot) % len(lines)
-          script_text, caption_text, tag_str = [x.strip() for x in lines[idx].split("|")]
-          tags = [t.strip().lower() for t in tag_str.split(",")]
+          parts = [x.strip() for x in lines[idx].split("|")]
+          if len(parts) != 3:
+              fail(f"سطر topics.txt رقم {idx + 1} يجب أن يحوي 3 أقسام (نص | وصف | وسوم) — وُجد {len(parts)}")
+          script_text, caption_text, tag_str = parts
+          tags = [t.strip().lower() for t in tag_str.split(",") if t.strip()]
+          print(f"[topic] slot={slot} idx={idx} tags={tags}", flush=True)
+          print(f"[caption] {caption_text}", flush=True)
 
+          # ---------- منع التكرار (أفضل جهد — يتخطى بصمت إن لم يتوفر Endpoint) ----------
+          def already_published():
+              try:
+                  r = requests.get(API + "/posts", headers=H, params={"limit": 50}, timeout=30)
+              except requests.RequestException as e:
+                  print(f"[dedupe] تخطّي الفحص: {e}", flush=True)
+                  return False
+              if r.status_code >= 300:
+                  print(f"[dedupe] تخطّي الفحص: HTTP {r.status_code}", flush=True)
+                  return False
+              try:
+                  d = r.json()
+              except ValueError:
+                  print("[dedupe] تخطّي الفحص: رد غير JSON", flush=True)
+                  return False
+              posts = d.get("posts", d) if isinstance(d, dict) else d
+              if not isinstance(posts, list):
+                  return False
+              cap = caption_text.strip()
+              return any(str(p.get("content") or p.get("caption") or "").strip() == cap
+                         for p in posts if isinstance(p, dict))
+
+
+          if KEY and already_published():
+              if DRY:
+                  print("[DRY] تنبيه: يوجد منشور بنفس الوصف مسبقاً", flush=True)
+              else:
+                  print("[skip] نفس الوصف منشور مسبقاً — تخطّي هذا التشغيل", flush=True)
+                  sys.exit(0)
+
+          # ---------- بناء الفيديو ----------
           os.makedirs("gdrive_vids", exist_ok=True)
-          gdown.download_folder(id=FOLDER_ID, output="gdrive_vids", quiet=True, use_cookies=False)
+          try:
+              gdown.download_folder(id=FOLDER_ID, output="gdrive_vids", quiet=True,
+                                    use_cookies=False, remaining_ok=True)
+          except Exception as e:
+              fail(f"تنزيل مجلد Google Drive فشل (تحقق من المشاركة/الحصالة): {e}")
 
           all_vids = []
           for ext in ("*.mp4", "*.mov", "*.MP4", "*.MOV"):
@@ -44,58 +126,105 @@ jobs:
           selected = random.sample(matched, min(4, len(matched))) if matched else []
           if len(selected) < 4 and others:
               selected.extend(random.sample(others, min(4 - len(selected), len(others))))
+          if not selected:
+              fail(f"لا توجد فيديوهات في المجلد (عدد الملفات {len(all_vids)}) — تحقق من FOLDER_ID")
+          print("[videos] " + "; ".join(selected), flush=True)
 
           clip_files = []
           for i, vpath in enumerate(selected):
               norm = f"norm_{i}.mp4"
-              subprocess.run([FFMPEG, "-y", "-i", vpath, "-t", "5.0", "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26", "-pix_fmt", "yuv420p", norm], check=True)
+              r = subprocess.run([FFMPEG, "-y", "-i", vpath, "-t", "5.0",
+                                  "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1",
+                                  "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26",
+                                  "-pix_fmt", "yuv420p", norm], capture_output=True, text=True)
+              if r.returncode != 0:
+                  fail(f"ffmpeg normalize فشل على {vpath} — {r.stderr[-400:]}")
               clip_files.append(norm)
 
-          with open("list.txt", "w") as f:
+          with open("list.txt", "w") as fh:
               for _ in range(4):
                   for c in clip_files:
-                      f.write(f"file '{c}'\n")
-          subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "base_vid.mp4"], check=True)
+                      fh.write(f"file '{c}'\n")
+
+          r = subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "list.txt",
+                              "-c", "copy", "base_vid.mp4"], capture_output=True, text=True)
+          if r.returncode != 0:
+              fail(f"concat الفيديو فشل — {r.stderr[-400:]}")
 
           sentences = [s.strip() for s in re.split(r'(?<=[.!؟،])\s+', script_text) if s.strip()]
-          seg_audios = []
-          timings = []
+          if not sentences:
+              fail("script_text لا يحتوي جملاً — لا يمكن توليد التعليق الصوتي")
+          seg_audios, timings = [], []
+
+
+          async def tts_one(text, out):
+              for attempt in (1, 2, 3):
+                  try:
+                      await edge_tts.Communicate(text, "ar-SA-HamedNeural", rate="-5%").save(out)
+                      return
+                  except Exception as e:
+                      if attempt == 3:
+                          fail(f"edge-tts فشل بعد 3 محاولات: {e}")
+                      print(f"[tts] محاولة {attempt} فشلت ({e}) — إعادة بعد 2 ثانية", flush=True)
+                      await asyncio.sleep(2)
+
 
           async def build_synced_audio():
               curr_t = 0.0
               for i, sent in enumerate(sentences):
                   seg_mp3 = f"seg_{i}.mp3"
-                  await edge_tts.Communicate(sent, "ar-SA-HamedNeural", rate="-5%").save(seg_mp3)
+                  await tts_one(sent, seg_mp3)
                   info = subprocess.run([FFMPEG, "-i", seg_mp3], capture_output=True, text=True).stderr
                   m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", info)
-                  dur = int(m.group(1))*3600 + int(m.group(2))*60 + float(m.group(3)) if m else 2.5
+                  if not m:
+                      print(f"[warn] لم أقرأ مدة seg_{i}.mp3 — افتراض 2.5 ثانية", flush=True)
+                      dur = 2.5
+                  else:
+                      dur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
 
                   words = sent.split()
-                  chunks = ["  ".join(words[j:j+4]) for j in range(0, len(words), 4)]
+                  chunks = ["  ".join(words[j:j + 4]) for j in range(0, len(words), 4)]
                   sub_dur = dur / len(chunks)
                   for k, ch in enumerate(chunks):
                       timings.append((ch, curr_t + k * sub_dur, curr_t + (k + 1) * sub_dur))
 
                   pad_mp3 = f"pad_{i}.mp3"
-                  subprocess.run([FFMPEG, "-y", "-i", seg_mp3, "-af", "apad=pad_dur=0.35", "-c:a", "libmp3lame", pad_mp3], check=True)
+                  r = subprocess.run([FFMPEG, "-y", "-i", seg_mp3, "-af", "apad=pad_dur=0.35",
+                                      "-c:a", "libmp3lame", pad_mp3], capture_output=True, text=True)
+                  if r.returncode != 0:
+                      fail(f"ffmpeg pad فشل على {seg_mp3} — {r.stderr[-400:]}")
                   seg_audios.append(pad_mp3)
                   curr_t += dur + 0.35
 
+
           asyncio.run(build_synced_audio())
 
-          with open("aud_list.txt", "w") as f:
+          with open("aud_list.txt", "w") as fh:
               for a in seg_audios:
-                  f.write(f"file '{a}'\n")
-          subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "aud_list.txt", "-c", "copy", "voice.mp3"], check=True)
+                  fh.write(f"file '{a}'\n")
 
-          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
+          r = subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", "aud_list.txt",
+                              "-c", "copy", "voice.mp3"], capture_output=True, text=True)
+          if r.returncode != 0:
+              fail(f"concat الصوت فشل — {r.stderr[-400:]}")
+
+          FONT_FILE = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+          if not os.path.exists(FONT_FILE):
+              alt = sorted(glob.glob("/usr/share/fonts/**/*.ttf", recursive=True))
+              if not alt:
+                  fail(f"لا يوجد خط {FONT_FILE} ولا أي بديل *.ttf على النظام")
+              FONT_FILE = alt[0]
+              print(f"[font] استخدام بديل: {FONT_FILE}", flush=True)
+          font = ImageFont.truetype(FONT_FILE, 40)
+
           sub_files = []
           for i, (phrase, st, en) in enumerate(timings):
               img = Image.new("RGBA", (720, 1280), (0, 0, 0, 0))
               draw = ImageDraw.Draw(img)
               x0, y0, x1, y1 = draw.textbbox((360, 910), phrase, font=font, anchor="mm", direction="rtl")
               draw.rounded_rectangle((x0 - 20, y0 - 14, x1 + 20, y1 + 14), radius=16, fill=(0, 15, 35, 225))
-              draw.text((360, 910), phrase, font=font, fill=(255, 255, 255, 255), anchor="mm", direction="rtl", stroke_width=2, stroke_fill=(0, 0, 0, 255))
+              draw.text((360, 910), phrase, font=font, fill=(255, 255, 255, 255), anchor="mm", direction="rtl",
+                        stroke_width=2, stroke_fill=(0, 0, 0, 255))
               fname = f"sub_{i}.png"
               img.save(fname)
               sub_files.append((fname, st, en))
@@ -104,24 +233,49 @@ jobs:
           filters = []
           last_v = "0:v"
           for i, (_, st, en) in enumerate(sub_files):
-              filters.append(f"[{last_v}][{i+2}:v]overlay=0:0:enable='between(t,{st:.2f},{en:.2f})'[v{i+1}]")
-              last_v = f"v{i+1}"
+              filters.append(f"[{last_v}][{i + 2}:v]overlay=0:0:enable='between(t,{st:.2f},{en:.2f})'[v{i + 1}]")
+              last_v = f"v{i + 1}"
 
-          subprocess.run([FFMPEG] + inputs + ["-filter_complex", ";".join(filters), "-map", f"[{last_v}]", "-map", "1:a", "-c:v", "libx264", "-preset", "fast", "-b:v", "450k", "-maxrate", "520k", "-bufsize", "900k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"], check=True)
+          r = subprocess.run([FFMPEG] + inputs + ["-filter_complex", ";".join(filters),
+                              "-map", f"[{last_v}]", "-map", "1:a", "-c:v", "libx264", "-preset", "fast",
+                              "-b:v", "450k", "-maxrate", "520k", "-bufsize", "900k", "-pix_fmt", "yuv420p",
+                              "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"], capture_output=True, text=True)
+          if r.returncode != 0:
+              fail(f"دمج reel.mp4 فشل — {r.stderr[-600:]}")
+          print("[ok] reel.mp4 جاهز", flush=True)
 
-          r_acc = requests.get(API + "/accounts", headers=H).json()
-          accs = r_acc.get("accounts", r_acc) if isinstance(r_acc, dict) else r_acc
-          ig_id = next(a.get("_id") or a.get("id") for a in accs if a.get("platform") == "instagram")
+          # ---------- النشر ----------
+          if DRY:
+              print("[DRY] تم البناء بنجاح — لن يتم النشر. الوصف المخطط:", flush=True)
+              print(caption_text, flush=True)
+              sys.exit(0)
 
-          with open("reel.mp4", "rb") as f:
-              up = requests.post(API + "/media", headers=H, files={"files": ("reel.mp4", f, "video/mp4")}, timeout=180).json()
-          vid_url = next(iter(up.get("files") or up.get("media") or [up]))["url"]
+          accs_raw = api_call(lambda: requests.get(API + "/accounts", headers=H, timeout=30), "GET /accounts")
+          accs = accs_raw.get("accounts", accs_raw) if isinstance(accs_raw, dict) else accs_raw
+          if not isinstance(accs, list):
+              fail(f"شكل رد /accounts غير متوقع: {str(accs_raw)[:200]}")
+          ig = next((a for a in accs if isinstance(a, dict) and a.get("platform") == "instagram"), None)
+          ig_id = (ig or {}).get("_id") or (ig or {}).get("id")
+          if not ig_id:
+              fail("لا يوجد حساب إنستغرام مربوط في Zernio")
 
-          post = requests.post(API + "/posts", headers=H, json={
+          with open("reel.mp4", "rb") as fh:
+              up = api_call(lambda: requests.post(API + "/media", headers=H,
+                                                  files={"files": ("reel.mp4", fh, "video/mp4")}, timeout=180),
+                            "رفع reel.mp4")
+          files = up.get("files") or up.get("media") or []
+          candidates = [files] if isinstance(files, dict) else (files if isinstance(files, list) else [])
+          first = next((c for c in candidates if isinstance(c, dict) and "url" in c), None)
+          if not first:
+              fail(f"رد /media لا يحوي url: {str(up)[:300]}")
+
+          body = {
               "content": caption_text,
-              "mediaItems": [{"type": "video", "url": vid_url}],
-              "platforms": [{"platform": "instagram", "accountId": ig_id, "platformSpecificData": {"contentType": "reels"}}],
-              "publishNow": True
-          })
-          print("✅ تم النشر بنجاح:", post.status_code)
+              "mediaItems": [{"type": "video", "url": first["url"]}],
+              "platforms": [{"platform": "instagram", "accountId": ig_id,
+                             "platformSpecificData": {"contentType": "reels"}}],
+              "publishNow": True,
+          }
+          post = api_call(lambda: requests.post(API + "/posts", headers=H, json=body, timeout=120), "نشر /posts")
+          print("✅ تم النشر بنجاح، المعرف:", post.get("_id") or post.get("id") or post, flush=True)
           EOF
