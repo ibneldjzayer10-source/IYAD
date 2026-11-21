@@ -3,7 +3,7 @@ name: BMW Auto
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 18 * * *' # النشر يومياً الساعة 7 مساءً بتوقيت الجزائر (وقت الذروة)
+    - cron: '0 18 * * *'
 
 jobs:
   run:
@@ -14,7 +14,6 @@ jobs:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
           pip install -q edge-tts requests imageio-ffmpeg Pillow arabic-reshaper python-bidi
-          curl -sL "https://githubusercontent.com" -o font.ttf
           python3 -c '
           import os, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
           import arabic_reshaper
@@ -27,13 +26,13 @@ jobs:
           H = {"Authorization": f"Bearer {KEY}"}
 
           MY_VIDEOS = [
-              "https://files.catbox.moe/vxmjih.mp4",
-              "https://files.catbox.moe/rvlqu7.mp4",
-              "https://files.catbox.moe/ev23xv.mp4",
-              "https://files.catbox.moe/enjpgg.mp4",
-              "https://files.catbox.moe/9xv0v3.mp4",
-              "https://files.catbox.moe/c9t4ir.mp4",
-              "https://files.catbox.moe/jhz2ui.mp4",
+              "https://catbox.moe" + "/vxmjih.mp4",
+              "https://catbox.moe" + "/rvlqu7.mp4",
+              "https://catbox.moe" + "/ev23xv.mp4",
+              "https://catbox.moe" + "/enjpgg.mp4",
+              "https://catbox.moe" + "/9xv0v3.mp4",
+              "https://catbox.moe" + "/c9t4ir.mp4",
+              "https://catbox.moe" + "/jhz2ui.mp4",
           ]
 
           TOPICS = [
@@ -57,7 +56,7 @@ jobs:
 
           item = random.choice(TOPICS)
 
-          # 1. اختيار 3 فيديوهات عشوائية من روابطك لعمل مونتاج سريع الإيقاع (تتغير اللقطة كل 4 ثوانٍ)
+          # 1. اختيار 3 فيديوهات عشوائية من روابطك لعمل مونتاج سريع الإيقاع
           selected = random.sample(MY_VIDEOS, 3)
           clip_files = []
           for idx, url in enumerate(selected):
@@ -68,7 +67,6 @@ jobs:
                   with open(raw_name, "wb") as f:
                       for chunk in r.iter_content(8192):
                           f.write(chunk)
-              # توحيد المقاس إلى 1080x1920 وأخذ 4.5 ثانية من كل فيديو لضمان إيقاع سريع
               subprocess.run([
                   FFMPEG, "-y", "-i", raw_name, "-t", "4.5",
                   "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1",
@@ -109,8 +107,8 @@ jobs:
               en = group[-1]["end"] + 0.15
               captions.append((phrase, st, en))
 
-          # 3. رسم الترجمة العربية السليمة
-          font = ImageFont.truetype("font.ttf", 68)
+          # 3. رسم الترجمة العربية السليمة باستخدام خط النظام المثبت
+          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 62)
           sub_files = []
           for idx, (phrase, st, en) in enumerate(captions):
               img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
