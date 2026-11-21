@@ -3,7 +3,7 @@ name: BMW Auto
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 18 * * *'
+    - cron: '0 18 * * *' # النشر يومياً الساعة 7 مساءً بتوقيت الجزائر
 
 jobs:
   run:
@@ -13,9 +13,9 @@ jobs:
         env:
           ZERNIO_KEY: ${{ secrets.ZERNIO_KEY }}
         run: |
-          pip install -q edge-tts requests imageio-ffmpeg Pillow arabic-reshaper python-bidi
+          pip install -q edge-tts requests imageio-ffmpeg Pillow arabic-reshaper python-bidi gdown
           python3 -c '
-          import os, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg
+          import os, glob, random, asyncio, edge_tts, subprocess, requests, imageio_ffmpeg, gdown
           import arabic_reshaper
           from bidi.algorithm import get_display
           from PIL import Image, ImageDraw, ImageFont
@@ -24,9 +24,7 @@ jobs:
           KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
-          CDN = "https://" + "files." + "catbox.moe/"
-
-          FILES = ["vxmjih.mp4", "rvlqu7.mp4", "ev23xv.mp4", "enjpgg.mp4", "9xv0v3.mp4", "c9t4ir.mp4", "jhz2ui.mp4"]
+          FOLDER_ID = "1KpnN7wch32bfzp5biG3tBJ5PMawWPxTQ"
 
           TOPICS = [
               {
@@ -49,30 +47,27 @@ jobs:
 
           item = random.choice(TOPICS)
 
-          # 1. تحميل 3 فيديوهات صالحة مع تجاوز أي رابط قديم تلقائياً
-          random.shuffle(FILES)
+          # 1. تحميل الفيديوهات من مجلد Google Drive الخاص بك
+          os.makedirs("gdrive_vids", exist_ok=True)
+          gdown.download_folder(id=FOLDER_ID, output="gdrive_vids", quiet=True, use_cookies=False)
+
+          all_vids = []
+          for ext in ("*.mp4", "*.mov", "*.MP4", "*.MOV"):
+              all_vids.extend(glob.glob(f"gdrive_vids/**/{ext}", recursive=True))
+
+          if not all_vids:
+              raise SystemExit("❌ لم يتم العثور على فيديوهات في المجلد!")
+
+          selected = random.sample(all_vids, min(3, len(all_vids)))
           clip_files = []
-          for fname in FILES:
-              if len(clip_files) == 3:
-                  break
-              url = CDN + fname
-              try:
-                  raw_name = f"raw_{len(clip_files)}.mp4"
-                  norm_name = f"norm_{len(clip_files)}.mp4"
-                  with requests.get(url, stream=True, timeout=60) as r:
-                      r.raise_for_status()
-                      with open(raw_name, "wb") as f:
-                          for chunk in r.iter_content(8192):
-                              f.write(chunk)
-                  subprocess.run([
-                      FFMPEG, "-y", "-i", raw_name, "-t", "4.5",
-                      "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1",
-                      "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", norm_name
-                  ], check=True)
-                  clip_files.append(norm_name)
-                  print("✅ تم تجهيز المقطع:", fname)
-              except Exception as e:
-                  print("⚠️ تم تخطي الملف:", fname, e)
+          for idx, vpath in enumerate(selected):
+              norm_name = f"norm_{idx}.mp4"
+              subprocess.run([
+                  FFMPEG, "-y", "-i", vpath, "-t", "4.5",
+                  "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1",
+                  "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", norm_name
+              ], check=True)
+              clip_files.append(norm_name)
 
           with open("list.txt", "w") as f:
               for _ in range(3):
