@@ -1,20 +1,30 @@
 """تشغيل السلسلة كاملة:  python run_pipeline.py
 خيارات:  --only 5 6   |  --from-step 9  |  --skip-publish  |  --dry-run  |  --lang en
-كل خطوة = أول كتلة ```python داخل ملف .claude/commands/NN-*.md"""
+كل خطوة = أول كتلة ```python داخل ملف commands/NN-*.md"""
 import argparse, os, re, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CMD = ROOT / ".claude" / "commands"
+# المسار الصحيح هو commands/ — مع بحث احتياطي في .claude/commands للتوافق مع النسخة القديمة
+CMD_DIRS = [d for d in (ROOT / "commands", ROOT / ".claude" / "commands") if d.is_dir()]
 # ترتيب التنفيذ الفعلي (12 قبل 08 كي لا يختل تزامن الترجمة مع التعليق الصوتي). 19 تُشغَّل عند الطلب.
 ORDER = [1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 8, 11, 13, 14, 15, 16, 17, 18, 20]
 NON_FATAL = {20}
 
 
 def code_of(n):
-    f = next(CMD.glob(f"{n:02d}-*.md"))
-    m = re.search(r"```python\n(.*?)```", f.read_text(encoding="utf-8"), re.S)
-    return f.name, m.group(1)
+    searched = []
+    for d in CMD_DIRS:
+        searched.append(str(d))
+        matches = sorted(d.glob(f"{n:02d}-*.md"))
+        if matches:
+            f = matches[0]
+            m = re.search(r"```python\n(.*?)```", f.read_text(encoding="utf-8"), re.S)
+            if not m:
+                sys.exit(f"!! لا توجد كتلة ```python داخل {f.name}")
+            return f.name, m.group(1)
+    where = ", ".join(searched) if searched else "لا يوجد مجلد commands/ ولا .claude/commands/"
+    sys.exit(f"!! لم يُعثر على ملف أمر للخطوة {n:02d} — بحثت في: {where}")
 
 
 def main():
