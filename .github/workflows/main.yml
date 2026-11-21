@@ -24,16 +24,9 @@ jobs:
           KEY = os.environ["ZERNIO_KEY"]
           API = "https://zernio.com" + "/api/v1"
           H = {"Authorization": f"Bearer {KEY}"}
+          CDN = "https://" + "files." + "catbox.moe/"
 
-          MY_VIDEOS = [
-              "https://catbox.moe" + "/vxmjih.mp4",
-              "https://catbox.moe" + "/rvlqu7.mp4",
-              "https://catbox.moe" + "/ev23xv.mp4",
-              "https://catbox.moe" + "/enjpgg.mp4",
-              "https://catbox.moe" + "/9xv0v3.mp4",
-              "https://catbox.moe" + "/c9t4ir.mp4",
-              "https://catbox.moe" + "/jhz2ui.mp4",
-          ]
+          FILES = ["vxmjih.mp4", "rvlqu7.mp4", "ev23xv.mp4", "enjpgg.mp4", "9xv0v3.mp4", "c9t4ir.mp4", "jhz2ui.mp4"]
 
           TOPICS = [
               {
@@ -56,23 +49,30 @@ jobs:
 
           item = random.choice(TOPICS)
 
-          # 1. اختيار 3 فيديوهات عشوائية من روابطك لعمل مونتاج سريع الإيقاع
-          selected = random.sample(MY_VIDEOS, 3)
+          # 1. تحميل 3 فيديوهات صالحة مع تجاوز أي رابط قديم تلقائياً
+          random.shuffle(FILES)
           clip_files = []
-          for idx, url in enumerate(selected):
-              raw_name = f"raw_{idx}.mp4"
-              norm_name = f"norm_{idx}.mp4"
-              with requests.get(url, stream=True, timeout=60) as r:
-                  r.raise_for_status()
-                  with open(raw_name, "wb") as f:
-                      for chunk in r.iter_content(8192):
-                          f.write(chunk)
-              subprocess.run([
-                  FFMPEG, "-y", "-i", raw_name, "-t", "4.5",
-                  "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1",
-                  "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", norm_name
-              ], check=True)
-              clip_files.append(norm_name)
+          for fname in FILES:
+              if len(clip_files) == 3:
+                  break
+              url = CDN + fname
+              try:
+                  raw_name = f"raw_{len(clip_files)}.mp4"
+                  norm_name = f"norm_{len(clip_files)}.mp4"
+                  with requests.get(url, stream=True, timeout=60) as r:
+                      r.raise_for_status()
+                      with open(raw_name, "wb") as f:
+                          for chunk in r.iter_content(8192):
+                              f.write(chunk)
+                  subprocess.run([
+                      FFMPEG, "-y", "-i", raw_name, "-t", "4.5",
+                      "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1",
+                      "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", norm_name
+                  ], check=True)
+                  clip_files.append(norm_name)
+                  print("✅ تم تجهيز المقطع:", fname)
+              except Exception as e:
+                  print("⚠️ تم تخطي الملف:", fname, e)
 
           with open("list.txt", "w") as f:
               for _ in range(3):
@@ -107,7 +107,7 @@ jobs:
               en = group[-1]["end"] + 0.15
               captions.append((phrase, st, en))
 
-          # 3. رسم الترجمة العربية السليمة باستخدام خط النظام المثبت
+          # 3. رسم الترجمة العربية السليمة
           font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 62)
           sub_files = []
           for idx, (phrase, st, en) in enumerate(captions):
