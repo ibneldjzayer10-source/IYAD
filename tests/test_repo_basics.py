@@ -44,6 +44,8 @@ class PublishScriptTests(unittest.TestCase):
         self.assertIn("status_code >= 300", self.src)  # فحص حقيقي لردود API
         self.assertIn("os.chdir(ROOT)", self.src)
         self.assertIn("RIGHTS_ENFORCE", self.src)  # مفتاح منع المحتوى غير المعتمد
+        self.assertIn("MAX_UPLOAD_MB", self.src)  # ترميز متكيّف بالحجم (علاج 413)
+        self.assertIn("413", self.src)
 
     def test_workflow_calls_script(self):
         wf_path = ROOT / ".github" / "workflows" / "main.yml"

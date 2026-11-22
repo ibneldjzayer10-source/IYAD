@@ -264,13 +264,24 @@ for i, (_, st, en) in enumerate(sub_files):
     filters.append(f"[{last_v}][{i + 2}:v]overlay=0:0:enable='between(t,{st:.2f},{en:.2f})'[v{i + 1}]")
     last_v = f"v{i + 1}"
 
-r = subprocess.run([FFMPEG] + inputs + ["-filter_complex", ";".join(filters),
-                    "-map", f"[{last_v}]", "-map", "1:a", "-c:v", "libx264", "-preset", "fast",
-                    "-b:v", "2500k", "-maxrate", "3200k", "-bufsize", "5000k", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"], capture_output=True, text=True)
-if r.returncode != 0:
-    fail(f"دمج reel.mp4 فشل — {r.stderr[-600:]}")
-print("[ok] reel.mp4 جاهز", flush=True)
+def render_final(video_kbps):
+    cmd = [FFMPEG] + inputs + ["-filter_complex", ";".join(filters),
+           "-map", f"[{last_v}]", "-map", "1:a", "-c:v", "libx264", "-preset", "fast",
+           "-b:v", f"{video_kbps}k", "-maxrate", f"{int(video_kbps * 1.3)}k",
+           "-bufsize", f"{int(video_kbps * 2)}k", "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-b:a", "96k", "-shortest", "reel.mp4"]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        fail(f"دمج reel.mp4 فشل — {r.stderr[-600:]}")
+    return Path("reel.mp4").stat().st_size
+
+
+_bd2 = _media_dur("base_vid.mp4")
+_out_s = min(_bd2, _vd) if _vd else _bd2
+MAX_MB = float(os.environ.get("MAX_UPLOAD_MB", "15"))
+_kb0 = max(300, min(2500, int(MAX_MB * 8192 / max(_out_s, 1.0) - 96)))
+_size = render_final(_kb0)
+print(f"[ok] reel.mp4 جاهز ({_size // 1048576}MB — {_kb0}k، المدة {_out_s:.1f}s)", flush=True)
 
 # ---------- النشر ----------
 if DRY:
@@ -287,10 +298,27 @@ ig_id = (ig or {}).get("_id") or (ig or {}).get("id")
 if not ig_id:
     fail("لا يوجد حساب إنستغرام مربوط في Zernio")
 
-with open("reel.mp4", "rb") as fh:
-    up = api_call(lambda: requests.post(API + "/media", headers=H,
-                                        files={"files": ("reel.mp4", fh, "video/mp4")}, timeout=180),
-                  "رفع reel.mp4")
+up_r = None
+for _i, _target in enumerate((MAX_MB, MAX_MB / 2, MAX_MB / 4)):
+    if _i > 0:  # 413: أعد الترميز بحجم أصغر ثم أعد الرفع
+        _kb = max(300, min(2500, int(_target * 8192 / max(_out_s, 1.0) - 96)))
+        _size = render_final(_kb)
+        print(f"[encode] إعادة ترميز بـ {_kb}k → {_size // 1048576}MB (هدف {_target:.1f}MB)", flush=True)
+    with open("reel.mp4", "rb") as fh:
+        up_r = requests.post(API + "/media", headers=H,
+                             files={"files": ("reel.mp4", fh, "video/mp4")}, timeout=180)
+    if up_r.status_code == 413:
+        print(f"[upload] HTTP 413 (الحجم {_size // 1048576}MB) — أصغّر وأعيد", flush=True)
+        continue
+    break
+else:
+    fail("رفع reel.mp4: HTTP 413 بعد 3 محاولات — تحقق من MAX_UPLOAD_MB")
+if up_r.status_code >= 300:
+    fail(f"رفع reel.mp4: HTTP {up_r.status_code} — {up_r.text[:300]}")
+try:
+    up = up_r.json()
+except ValueError:
+    fail(f"رد /media غير JSON — {up_r.text[:300]}")
 files = up.get("files") or up.get("media") or []
 candidates = [files] if isinstance(files, dict) else (files if isinstance(files, list) else [])
 first = next((c for c in candidates if isinstance(c, dict) and "url" in c), None)
